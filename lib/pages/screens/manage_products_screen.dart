@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../app.dart';
 import 'AddProductScreen.dart';
-import '../../goclaud/resetapi.dart'; // <-- NEW
-import '../../goclaud/config.dart'; // <-- NEW
-import '../../goclaud/product_model.dart'; // <-- NEW: gunakan model untuk parsing
-import 'dart:convert'; // <-- NEW
+import '../../goclaud/resetapi.dart'; /
+import '../../goclaud/config.dart';
+import '../../goclaud/product_model.dart'; 
+import 'dart:convert';
 
 class ManageProductsScreen extends StatefulWidget {
   final String userRole;
@@ -79,7 +79,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     _filteredProducts = List.from(ManageProductsScreen.store.value);
     ManageProductsScreen.store.addListener(_onRepoChanged);
     _searchController.addListener(_filterProducts);
-    // load dari server saat layar dibuka
+   
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadProductsFromServer());
   }
 
