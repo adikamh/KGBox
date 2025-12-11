@@ -15,7 +15,7 @@ class _Simple10SecondSplashState extends State<Simple10SecondSplash> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     
     // Tunggu 10 detik lalu navigasi
-    Future.delayed(const Duration(seconds: 10), () {
+    Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/login');
       }

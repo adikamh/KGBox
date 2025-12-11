@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:device_preview/device_preview.dart';
-import 'pages/dashboard/login_page.dart';
+import 'package:kg_dns/pages/dashboard/login_page.dart';
+import 'package:kg_dns/pages/screens/splash_screen.dart';
 
 // ============================================================================
 // APP COLORS
@@ -269,7 +270,7 @@ class CustomDrawer extends StatelessWidget {
             icon: Icons.logout,
             title: 'Logout',
             onTap: () {
-              Navigator.pushReplacementNamed(context, '/login');
+              Navigator.pushReplacementNamed(context, '/lSimple10SecondSplash');
             },
           ),
         ],
@@ -550,8 +551,9 @@ class WarehouseApp extends StatelessWidget {
       title: 'Warehouse Management',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      home: const LoginPage(),
-      routes: {'/login': (context) => const LoginPage()},
+      home: const Simple10SecondSplash(),
+      routes: {'/Simple10SecondSplash': (context) => const Simple10SecondSplash(),
+      '/login': (context) => const LoginPage()} ,   
       debugShowCheckedModeBanner: false,
       useInheritedMediaQuery: true,
       locale: DevicePreview.locale(context),

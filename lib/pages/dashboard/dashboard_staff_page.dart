@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:kg_dns/pages/screens/barcode_scanner_screens.dart';
+import 'package:kg_dns/pages/screens/manage_products_screen.dart';
 
 import '../../app.dart';
 import '../screens/notifications_screen.dart';
-import '../screens/manage_products_screen.dart';
+import '../screens/AddProductScreen.dart';
 import '../screens/product_out_screen.dart';
 
 class DashboardStaffPage extends StatefulWidget {
@@ -204,7 +206,6 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          // Grid 2x3
                           GridView.count(
                             crossAxisCount: 3,
                             shrinkWrap: true,
@@ -213,47 +214,54 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                             crossAxisSpacing: 12,
                             childAspectRatio: 0.85,
                             children: [
-                              // Stok Rendah
                               _buildStatCard(
                                 icon: Icons.warning_amber_rounded,
                                 value: '12',
                                 label: 'Sisa produk',
                                 color: const Color.fromARGB(255, 245, 11, 11),
                               ),
-                              // Trending
                               _buildStatCard(
                                 icon: Icons.trending_up_rounded,
                                 value: '3',
                                 label: 'Terlaris',
                                 color: const Color.fromARGB(255, 50, 236, 44),
                               ),
-                              // Kategori
                               _buildStatCard(
                                 icon: Icons.event_rounded,
                                 value: '1',
                                 label: 'Kadaluarsa',
                                 color: const Color.fromARGB(255, 255, 238, 0),
                               ),
-                              // Visualisasi
                               _buildStatCard(
                                 icon: Icons.bar_chart_rounded,
                                 value: '0',
                                 label: 'Suplier',
                                 color: const Color.fromARGB(255, 16, 103, 185),
                               ),
-                              // Pengiriman
                               _buildStatCard(
                                 icon: Icons.local_shipping_rounded,
                                 value: '3',
                                 label: 'Pengiriman',
                                 color: const Color.fromARGB(255, 248, 154, 12),
                               ),
-                              // Cari
                               _buildStatCard(
                                 icon: Icons.barcode_reader,
-                                value: '',
-                                label: 'barcode',
-                                color: const Color.fromARGB(255, 82, 78, 78),
+                                value: "",
+                                label: "Scan Barcode",
+                                color: Colors.blueGrey,
+                                onTap: () async {
+                                  final result = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const BarcodeScannerScreen(),
+                                    ),
+                                  );
+                                  if (result != null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text("Barcode: $result")),
+                                    );
+                                  }
+                                },
                               ),
                             ],
                           ),
@@ -278,13 +286,15 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                                 Color.fromARGB(255, 255, 255, 255),
                               ],
                             ),
-                            iconColor: const Color.fromARGB(255, 0, 0, 0), // Warna ikon hitam
-                            textColor: const Color.fromARGB(255, 0, 0, 0), // Warna teks hitam
+                            iconColor: const Color.fromARGB(255, 0, 0, 0),
+                            textColor: const Color.fromARGB(255, 0, 0, 0),
                             onPressed: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => ProductOutScreen(userRole: widget.userRole),
+                                  builder: (_) => AddProdukScreen(
+                                    userRole: widget.userRole,
+                                  ),
                                 ),
                               );
                             },
@@ -302,8 +312,8 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                                 Color.fromARGB(255, 255, 255, 255),
                               ],
                             ),
-                            iconColor: const Color.fromARGB(255, 0, 0, 0), // Warna ikon hitam
-                            textColor: const Color.fromARGB(255, 0, 0, 0), // Warna teks hitam
+                            iconColor: const Color.fromARGB(255, 0, 0, 0),
+                            textColor: const Color.fromARGB(255, 0, 0, 0),
                             onPressed: () {
                               Navigator.push(
                                 context,
@@ -390,8 +400,8 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
     required String label,
     required Gradient gradient,
     required VoidCallback onPressed,
-    Color iconColor = Colors.white, // Default warna ikon putih
-    Color textColor = Colors.white, // Default warna teks putih
+    Color iconColor = Colors.white,
+    Color textColor = Colors.white,
   }) {
     return Container(
       height: 100,
@@ -418,14 +428,14 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 32, color: iconColor), // Menggunakan iconColor
+            Icon(icon, size: 32, color: iconColor),
             const SizedBox(height: 8),
             Text(
               label,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                color: textColor, // Menggunakan textColor
+                color: textColor,
               ),
             ),
           ],
@@ -439,21 +449,27 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
     required String value,
     required String label,
     required Color color,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: color.withOpacity(0.3),
+            width: 1,
           ),
-        ],
-      ),
-      child: Padding(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
         padding: const EdgeInsets.all(10),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -466,7 +482,11 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                 color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(
+                icon,
+                color: color,
+                size: 22,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
