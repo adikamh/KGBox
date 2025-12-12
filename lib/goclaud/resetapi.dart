@@ -232,18 +232,65 @@ class DataService {
    Future removeId(String token, String project, String collection, String appid, String id) async {
       String uri = 'https://api.247go.app/v5/remove_id/token/' + token + '/project/' + project + '/collection/' + collection + '/appid/' + appid + '/id/' + id;
 
-      try {
-         final response = await http.delete(Uri.parse(uri));
-
-         if (response.statusCode == 200) {
-            return true;
-         } else {
-            return false;
+         http.Response? response;
+         try {
+            response = await http.delete(Uri.parse(uri)).timeout(const Duration(seconds: 15));
+         } catch (e) {
+            // Capture delete exception but continue to fallbacks
+            print('removeId DELETE exception: $e');
+            response = null;
          }
-      } catch (e) {
-         // Print error here
+
+         // If DELETE returned 200 treat as success
+         if (response != null && response.statusCode == 200) {
+            return true;
+         }
+
+         // Fallback: some servers expect GET for this endpoint — try GET and treat 200 as success
+         try {
+            final respGet = await http.get(Uri.parse(uri)).timeout(const Duration(seconds: 15));
+            if (respGet.statusCode == 200) return true;
+            // Log for debugging
+            if (response != null) print('removeId DELETE failed: ${response.statusCode} ${response.body}');
+            print('removeId GET fallback: ${respGet.statusCode} ${respGet.body}');
+         } catch (e) {
+            print('removeId GET fallback exception: $e');
+         }
+
+         // Additional fallback: call remove_where to delete by id field (some APIs accept this)
+         try {
+            print('removeId: trying remove_where fallback for id=$id');
+            final rmWhere = await removeWhere(token, project, collection, appid, 'id', id);
+            print('remove_where result: $rmWhere');
+            if (rmWhere) return true;
+         } catch (e) {
+            print('removeId remove_where fallback exception: $e');
+         }
+
+         // Additional POST-based fallback: some APIs accept form POST to /v5/remove_id/product
+         try {
+            final postUri = 'https://api.247go.app/v5/remove_id/product';
+            final postBody = {
+              'token': token,
+              'project': project,
+              'collection': collection,
+              'appid': appid,
+              'id': id,
+            };
+            print('removeId: trying POST fallback -> $postUri with body: $postBody');
+            final respPost = await http.post(Uri.parse(postUri), body: postBody).timeout(const Duration(seconds: 15));
+            print('removeId POST fallback: ${respPost.statusCode} ${respPost.body}');
+            if (respPost.statusCode == 200) {
+              final lower = respPost.body.toLowerCase();
+              if (lower.contains('success') || lower.contains('remove') || lower.contains('deleted') || lower.contains('1')) {
+                return true;
+              }
+            }
+         } catch (e) {
+            print('removeId POST fallback exception: $e');
+         }
+
          return false;
-      }
    }
 
    Future removeWhere(String token, String project, String collection, String appid, String where_field, String where_value) async {

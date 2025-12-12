@@ -21,8 +21,19 @@ class ProductModel {
   });
 
   factory ProductModel.fromJson(Map data) {
+    // Normalize id: server may return 'id', '_id' or an object like {'\$oid': '...'}
+    dynamic rawId = data['id'] ?? data['_id'] ?? '';
+    String parsedId = '';
+    if (rawId is Map) {
+      if (rawId.containsKey('\$oid')) parsedId = rawId['\$oid'].toString();
+      else if (rawId.containsKey(r'$oid')) parsedId = rawId[r'$oid'].toString();
+      else parsedId = rawId.toString();
+    } else {
+      parsedId = rawId?.toString() ?? '';
+    }
+
     return ProductModel(
-      id: data['id'] ?? '',
+      id: parsedId,
       id_product: data['id_product'] ?? '',
       nama_product: data['nama_product'] ?? '',
       kategori_product: data['kategori_product'] ?? '',
