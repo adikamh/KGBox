@@ -9,7 +9,7 @@ import '../screens/product_out_screen.dart';
 
 class DashboardStaffPage extends StatefulWidget {
   final String userRole;
-  const DashboardStaffPage({Key? key, required this.userRole}) : super(key: key);
+  const DashboardStaffPage({super.key, required this.userRole});
 
   @override
   _DashboardStaffPageState createState() => _DashboardStaffPageState();
@@ -96,30 +96,24 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
-                    // PRODUK KELUAR CARD
+                    // PRODUK KELUAR CARD - Enhanced
                     Container(
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color.fromARGB(255, 255, 255, 255),
-                            Color.fromARGB(255, 255, 255, 255),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF4CAF50).withOpacity(0.3),
-                            blurRadius: 15,
-                            offset: const Offset(0, 8),
+                            color: Colors.black.withOpacity(0.15),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                            spreadRadius: 0,
                           ),
                         ],
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(24.0),
+                        padding: const EdgeInsets.all(28.0),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -127,50 +121,64 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'Produk Keluar',
                                     style: TextStyle(
-                                      fontSize: 16,
-                                      color: Color.fromARGB(179, 0, 0, 0),
+                                      fontSize: 18,
+                                      color: Colors.grey[700],
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Hari Ini',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[500],
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
-                                  const Text(
-                                    'Hari Ini',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Color.fromARGB(153, 0, 0, 0),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 20),
                                   Text(
                                     '$totalQty',
                                     style: const TextStyle(
-                                      fontSize: 48,
+                                      fontSize: 56,
                                       fontWeight: FontWeight.bold,
-                                      color: Color.fromARGB(255, 0, 0, 0),
+                                      color: Color(0xFF1A1A1A),
+                                      height: 1.0,
                                     ),
                                   ),
-                                  const Text(
+                                  const SizedBox(height: 4),
+                                  Text(
                                     'Unit',
                                     style: TextStyle(
-                                      fontSize: 14,
-                                      color: Color.fromARGB(179, 0, 0, 0),
+                                      fontSize: 15,
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.5,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.all(20),
+                              padding: const EdgeInsets.all(24),
                               decoration: BoxDecoration(
-                                color: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(16),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    const Color.fromARGB(255, 41, 101, 192).withOpacity(0.1),
+                                    const Color.fromARGB(255, 62, 163, 67).withOpacity(0.1),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: const Icon(
-                                Icons.inventory_2_outlined,
-                                size: 56,
-                                color: Color.fromARGB(255, 0, 0, 0),
+                                Icons.inventory_2_rounded,
+                                size: 64,
+                                color: Color.fromARGB(255, 41, 101, 192),
                               ),
                             ),
                           ],
@@ -178,77 +186,99 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                       ),
                     ),
 
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 28),
 
-                    // STATISTIK PRODUK CARD
+                    // STATISTIK PRODUK CARD - Enhanced
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                            spreadRadius: 0,
                           ),
                         ],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Statistik Produk',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A1A1A),
-                            ),
+                          Row(
+                            children: [
+                              Container(
+                                width: 4,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Color.fromARGB(255, 41, 101, 192),
+                                      Color.fromARGB(255, 62, 163, 67),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Statistik Produk',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1A1A1A),
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 20),
                           GridView.count(
                             crossAxisCount: 3,
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             mainAxisSpacing: 12,
                             crossAxisSpacing: 12,
-                            childAspectRatio: 0.85,
+                            childAspectRatio: 0.95,
                             children: [
                               _buildStatCard(
                                 icon: Icons.warning_amber_rounded,
                                 value: '12',
-                                label: 'Sisa produk',
-                                color: const Color.fromARGB(255, 245, 11, 11),
+                                label: 'Sisa\nproduk',
+                                color: const Color(0xFFEF5350),
                               ),
                               _buildStatCard(
                                 icon: Icons.trending_up_rounded,
                                 value: '3',
                                 label: 'Terlaris',
-                                color: const Color.fromARGB(255, 50, 236, 44),
+                                color: const Color(0xFF66BB6A),
                               ),
                               _buildStatCard(
                                 icon: Icons.event_rounded,
                                 value: '1',
                                 label: 'Kadaluarsa',
-                                color: const Color.fromARGB(255, 255, 238, 0),
+                                color: const Color(0xFFFFCA28),
                               ),
                               _buildStatCard(
                                 icon: Icons.bar_chart_rounded,
                                 value: '0',
                                 label: 'Suplier',
-                                color: const Color.fromARGB(255, 16, 103, 185),
+                                color: const Color(0xFF42A5F5),
                               ),
                               _buildStatCard(
                                 icon: Icons.local_shipping_rounded,
                                 value: '3',
                                 label: 'Pengiriman',
-                                color: const Color.fromARGB(255, 248, 154, 12),
+                                color: const Color(0xFFFF7043),
                               ),
                               _buildStatCard(
-                                icon: Icons.barcode_reader,
+                                icon: Icons.qr_code_scanner_rounded,
                                 value: "",
-                                label: "Scan Barcode",
-                                color: Colors.blueGrey,
+                                label: "Scan\nBarcode",
+                                color: const Color(0xFF78909C),
                                 onTap: () async {
                                   final result = await Navigator.push(
                                     context,
@@ -258,7 +288,13 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                                   );
                                   if (result != null) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text("Barcode: $result")),
+                                      SnackBar(
+                                        content: Text("Barcode: $result"),
+                                        behavior: SnackBarBehavior.floating,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
                                     );
                                   }
                                 },
@@ -269,25 +305,17 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                       ),
                     ),
 
-                    const SizedBox(height: 32),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 28),
 
-                    // Row Buttons
+                    // Action Buttons Section - Fixed
                     Row(
                       children: [
                         Expanded(
                           child: _buildActionButton(
                             context,
-                            icon: Icons.add_circle_outline,
-                            label: 'Tambah',
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color.fromARGB(255, 255, 255, 255),
-                                Color.fromARGB(255, 255, 255, 255),
-                              ],
-                            ),
-                            iconColor: const Color.fromARGB(255, 0, 0, 0),
-                            textColor: const Color.fromARGB(255, 0, 0, 0),
+                            icon: Icons.add_circle_outline_rounded,
+                            label: 'Tambah Produk',
+                            iconColor: const Color.fromARGB(255, 41, 101, 192),
                             onPressed: () {
                               Navigator.push(
                                 context,
@@ -300,20 +328,13 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                             },
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 14),
                         Expanded(
                           child: _buildActionButton(
                             context,
                             icon: Icons.visibility_outlined,
-                            label: 'Lihat',
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color.fromARGB(255, 255, 255, 255),
-                                Color.fromARGB(255, 255, 255, 255),
-                              ],
-                            ),
-                            iconColor: const Color.fromARGB(255, 0, 0, 0),
-                            textColor: const Color.fromARGB(255, 0, 0, 0),
+                            label: 'Lihat Produk',
+                            iconColor: const Color.fromARGB(255, 62, 163, 67),
                             onPressed: () {
                               Navigator.push(
                                 context,
@@ -327,27 +348,21 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                       ],
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
 
-                    // Full Width Button
+                    // Full Width Button - Enhanced
                     Container(
                       width: double.infinity,
-                      height: 60,
+                      height: 68,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            Color.fromARGB(255, 255, 255, 255),
-                            Color.fromARGB(255, 255, 255, 255),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF4CAF50).withOpacity(0.4),
-                            blurRadius: 12,
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 16,
                             offset: const Offset(0, 6),
+                            spreadRadius: 0,
                           ),
                         ],
                       ),
@@ -355,8 +370,9 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           shadowColor: Colors.transparent,
+                          elevation: 0,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                         ),
                         onPressed: () {
@@ -367,23 +383,42 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                             ),
                           );
                         },
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.note_add_outlined, size: 24, color: Color.fromARGB(255, 0, 0, 0)),
-                            SizedBox(width: 12),
-                            Text(
-                              'Catat Produk',
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    const Color.fromARGB(255, 41, 101, 192).withOpacity(0.15),
+                                    const Color.fromARGB(255, 62, 163, 67).withOpacity(0.15),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.note_add_rounded,
+                                size: 26,
+                                color: Color.fromARGB(255, 41, 101, 192),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            const Text(
+                              'Catat Produk Keluar',
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 17,
                                 fontWeight: FontWeight.bold,
-                                color: Color.fromARGB(255, 0, 0, 0),
+                                color: Color(0xFF1A1A1A),
+                                letterSpacing: 0.3,
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
+
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -398,47 +433,58 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
     BuildContext context, {
     required IconData icon,
     required String label,
-    required Gradient gradient,
     required VoidCallback onPressed,
-    Color iconColor = Colors.white,
-    Color textColor = Colors.white,
+    required Color iconColor,
   }) {
     return Container(
       height: 100,
       decoration: BoxDecoration(
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
             offset: const Offset(0, 4),
+            spreadRadius: 0,
           ),
         ],
       ),
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        onPressed: onPressed,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 32, color: iconColor),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-              ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, size: 28, color: iconColor),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A1A1A),
+                    letterSpacing: 0.1,
+                    height: 1.2,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -451,65 +497,72 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
     required Color color,
     VoidCallback? onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: color.withOpacity(0.3),
-            width: 1,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: color.withOpacity(0.2),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+                spreadRadius: 0,
+              ),
+            ],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 22,
+                ),
               ),
-              child: Icon(
-                icon,
-                color: color,
-                size: 22,
+              const SizedBox(height: 6),
+              if (value.isNotEmpty)
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                    height: 1.0,
+                  ),
+                ),
+              if (value.isNotEmpty) const SizedBox(height: 3),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w600,
+                  height: 1.15,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

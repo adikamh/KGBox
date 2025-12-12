@@ -46,7 +46,6 @@ class AppTheme {
       colorScheme: ColorScheme.light(
         primary: AppColors.primary,
         secondary: AppColors.secondary,
-        background: AppColors.background,
         surface: Colors.white,
       ),
       scaffoldBackgroundColor: AppColors.background,

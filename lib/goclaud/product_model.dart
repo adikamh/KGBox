@@ -3,8 +3,7 @@ class ProductModel {
    final String id_product;
    final String nama_product;
    final String kategori_product;
-   final String jenis_product;
-   final String gambar_product;
+   final String merek_product;
    final String tanggal_beli;
    final String harga_product;
    final String jumlah_produk;
@@ -14,24 +13,35 @@ class ProductModel {
       required this.id_product,
       required this.nama_product,
       required this.kategori_product,
-      required this.jenis_product,
-      required this.gambar_product,
+      required this.merek_product,
       required this.tanggal_beli,
       required this.harga_product,
-      required this.jumlah_produk
+      required this.jumlah_produk,
    });
 
-   factory ProductModel.fromJson(Map<String, dynamic> data) {
+   factory ProductModel.fromJson(Map data) {
       return ProductModel(
-         id: (data['_id'] ?? '').toString(),
-         id_product: (data['id_product'] ?? '').toString(),
-         nama_product: (data['nama_product'] ?? '').toString(),
-         kategori_product: (data['kategori_product'] ?? '').toString(),
-         jenis_product: (data['jenis_product'] ?? '').toString(),
-         gambar_product: (data['gambar_product'] ?? '').toString(),
-         tanggal_beli: (data['tanggal_beli'] ?? '').toString(),
-         harga_product: (data['harga_product'] ?? '').toString(),
-         jumlah_produk: (data['jumlah_produk'] ?? '').toString()
+         id: data['_id'] ?? '',
+         id_product: data['id_product'] ?? '',
+         nama_product: data['nama_product'] ?? '',
+         kategori_product: data['kategori_product'] ?? '',
+         merek_product: data['merek_product'] ?? '',
+         tanggal_beli: data['tanggal_beli'] ?? '',
+         harga_product: data['harga_product'] ?? '0',
+         jumlah_produk: data['jumlah_produk'] ?? '0',
       );
+   }
+
+   Map<String, dynamic> toJson() {
+      return {
+         'id': id,
+         'id_product': id_product,
+         'nama_product': nama_product,
+         'kategori_product': kategori_product,
+         'merek_product': merek_product,
+         'tanggal_beli': tanggal_beli,
+         'harga_product': harga_product,
+         'jumlah_produk': jumlah_produk,
+      };
    }
 }

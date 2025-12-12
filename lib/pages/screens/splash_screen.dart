@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class Simple10SecondSplash extends StatefulWidget {
-  const Simple10SecondSplash({Key? key}) : super(key: key);
+  const Simple10SecondSplash({super.key});
 
   @override
   State<Simple10SecondSplash> createState() => _Simple10SecondSplashState();
@@ -35,7 +35,7 @@ class _Simple10SecondSplashState extends State<Simple10SecondSplash> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Container(
+      body: SizedBox(
         width: double.infinity,
         height: double.infinity,
         child:Image.asset(
