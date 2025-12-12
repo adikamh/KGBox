@@ -215,7 +215,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         final ProductModel pm = ProductModel.fromJson(data);
 
         return <String, dynamic>{
-          'id': pm.id_product,
+          'id': pm.id,  // Use GoCloud _id (document ID) for API operations
           'name': pm.nama_product,
           'code': pm.id_product,
           'category': pm.kategori_product.isNotEmpty ? pm.kategori_product : 'Umum',
@@ -257,7 +257,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     try {
       // Coba parse format dari server, misal: "2024-12-18 10:30:00"
       final parts = dateTimeStr.split(' ');
-      if (parts.isNotEmpty) {
+      if (parts.length >= 1) {
         final dateParts = parts[0].split('-');
         if (dateParts.length >= 3) {
           final day = int.parse(dateParts[2]);
@@ -296,7 +296,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
       ...products.map((p) => (p['category'] ?? '').toString())
         .where((s) => s.isNotEmpty)
         .toSet()
-        
+        .toList()
     ];
 
     return Scaffold(

@@ -45,6 +45,47 @@ class DataService {
       }
    }
 
+   Future updateId(String update_field, String update_value, String token, 
+         String project, String collection, String appid, String id) async {
+      // Use documented endpoint: POST /v5/update_id/product (form-data)
+      final String uri = 'https://api.247go.app/v5/update_id/product';
+
+      try {
+         final body = {
+               'update_field': update_field,
+               'update_value': update_value,
+               'token': token,
+               'project': project,
+               'collection': collection,
+               'appid': appid,
+               'id': id
+         };
+
+         print('Calling updateId -> $uri');
+         print('  body: $body');
+
+         final response = await http.post(Uri.parse(uri), body: body).timeout(const Duration(seconds: 15));
+
+         print('  updateId status: ${response.statusCode}');
+         print('  updateId body: ${response.body}');
+
+         if (response.statusCode == 200) {
+            final lower = response.body.toLowerCase();
+            if (lower.contains('error') || lower.contains('failed')) {
+               print('  updateId returned error in body');
+               return false;
+            }
+            return true;
+         } else {
+            return false;
+         }
+      } catch (e) {
+         print('  Exception updateId: $e');
+         return false;
+      }
+   }
+   // HAPUS method updateId yang ini (baris 37-61) karena duplikat
+   
    Future selectAll(String token, String project, String collection, String appid) async {
       String uri = 'https://api.247go.app/v5/select_all/token/' + token + '/project/' + project + '/collection/' + collection + '/appid/' + appid;
 
@@ -313,29 +354,7 @@ class DataService {
       }
    }
 
-   Future updateId(String update_field, String update_value, String token, String project, String collection, String appid, String id) async {
-      String uri = 'https://api.247go.app/v5/update_id/';
-
-      try {
-         final response = await http.put(Uri.parse(uri),body: {
-             'update_field': update_field,
-             'update_value': update_value,
-             'token': token,
-             'project': project,
-             'collection': collection,
-             'appid': appid,
-             'id': id
-         });
-
-         if (response.statusCode == 200) {
-            return true;
-         } else {
-            return false;
-         }
-      } catch (e) {
-         return false;
-      }
-   }
+   // Method updateId sudah di atas (line 37)
 
    Future updateWhere(String where_field, String where_value, String update_field, String update_value, String token, String project, String collection, String appid) async {
       String uri = 'https://api.247go.app/v5/update_where/';

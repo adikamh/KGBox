@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:kg_dns/goclaud/product_model.dart'; // Import dari file terpisah
+import 'EditProdukScreen.dart';
 
 class DetailProdukScreen extends StatelessWidget {
   final Map<String, dynamic> product;
@@ -24,6 +26,9 @@ class DetailProdukScreen extends StatelessWidget {
     final tanggal = raw?['tanggal_beli'] ?? product['last_updated'] ?? '-';
     final price = raw?['harga_product'] ?? product['price'] ?? '-';
     final stock = raw?['jumlah_produk'] ?? product['stock'] ?? '-';
+
+    // Ambil ID dari data yang benar
+    final docId = product['id'] ?? product['_id'] ?? '';
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -197,9 +202,34 @@ class DetailProdukScreen extends StatelessWidget {
                           height: 52,
                           child: ElevatedButton.icon(
                             onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Fitur edit akan segera hadir')),
-                              );
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => EditProdukScreen(
+                                    product: ProductModel(
+                                      id: docId,  // ID GoCloud
+                                      id_product: code,
+                                      nama_product: name,
+                                      kategori_product: category,
+                                      merek_product: brand,
+                                      tanggal_beli: tanggal,
+                                      harga_product: price,
+                                      jumlah_produk: stock.toString(),
+                                    ),
+                                  ),
+                                ),
+                              ).then((updatedProduct) {
+                                if (updatedProduct != null && updatedProduct is ProductModel) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Produk berhasil diperbarui'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                  // Refresh atau navigasi kembali
+                                  Navigator.pop(context, updatedProduct);
+                                }
+                              });
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue[700],

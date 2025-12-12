@@ -244,7 +244,7 @@ class _AddProdukScreenState extends State<AddProdukScreen> {
                       
                       // Kategori
                       DropdownButtonFormField<String>(
-                        initialValue: _selectedCategory,
+                        value: _selectedCategory,
                         decoration: const InputDecoration(
                           labelText: 'Kategori *',
                           border: OutlineInputBorder(),
