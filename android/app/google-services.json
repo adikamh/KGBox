@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "868462308934",
+    "project_id": "kgbox-f93ae",
+    "storage_bucket": "kgbox-f93ae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:868462308934:android:053559afda3b843b70e447",
+        "android_client_info": {
+          "package_name": "com.example.kg_dns"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "868462308934-nflhnifqn6n1o99g7ol4b4ckfehigg0r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAZUwl2g_ejgPy_3_bmvpvCOwlEne72Zq4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "868462308934-nflhnifqn6n1o99g7ol4b4ckfehigg0r.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "868462308934-vhsfo4v111gitdb22ccsak658hml2941.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.kgDns"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

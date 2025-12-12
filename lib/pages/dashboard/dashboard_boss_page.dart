@@ -107,6 +107,7 @@ class _EnhancedDashboardBossScreenState extends State<EnhancedDashboardBossScree
   }
 
   Widget _buildTodaysSummary(BuildContext context) {
+    // Clean, stable layout for today's summary
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -137,221 +138,140 @@ class _EnhancedDashboardBossScreenState extends State<EnhancedDashboardBossScree
           ],
         ),
         const SizedBox(height: 20),
-        
-        // CARD UTAMA: Total Produk
+
+        // Redesigned card
         Container(
-          padding: const EdgeInsets.all(24),
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Bagian Atas: Total Produk
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Total Produk',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: 120,
-                        child: TextField(
-                          controller: totalProdukController,
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                            letterSpacing: -1,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Total Produk',
+                          style: TextStyle(
+                            color: Colors.black87,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                           ),
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                            isDense: true,
-                          ),
-                          keyboardType: TextInputType.number,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            totalProdukController.text,
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
-                    width: 60,
-                    height: 60,
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
-                      Icons.inventory_2_rounded,
-                      color: Colors.black,
-                      size: 32,
-                    ),
+                    child: const Icon(Icons.inventory_2_rounded, color: Colors.black87),
                   ),
                 ],
               ),
-              
-              const SizedBox(height: 24),
-              
-              // Bagian Bawah: Barang Masuk dan Barang Keluar
+
+              const SizedBox(height: 16),
+
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey[300]!, width: 1),
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    // Barang Masuk
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF4CAF50),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(
-                                  Icons.arrow_downward_rounded,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Barang Masuk',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: 100,
-                            child: TextField(
-                              controller: barangMasukController,
-                              style: const TextStyle(
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                                isDense: true,
-                              ),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Dari minggu lalu',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
+                      child: _smallStatCard(
+                        title: 'Barang Masuk',
+                        value: barangMasukController.text,
+                        icon: Icons.arrow_downward_rounded,
+                        color: Colors.green,
+                        note: 'Dari minggu lalu',
                       ),
                     ),
-
-                    // Garis pemisah
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Container(
-                        width: 1.2,
-                        height: 110,
-                        color: Colors.grey[300],
-                      ),
-                    ),
-
-                    // Barang Keluar
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEF4444),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(
-                                  Icons.arrow_upward_rounded,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Barang Keluar',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: 100,
-                            child: TextField(
-                              controller: barangKeluarController,
-                              style: const TextStyle(
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                                isDense: true,
-                              ),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Dari minggu lalu',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
+                      child: _smallStatCard(
+                        title: 'Barang Keluar',
+                        value: barangKeluarController.text,
+                        icon: Icons.arrow_upward_rounded,
+                        color: Colors.red,
+                        note: 'Dari minggu lalu',
                       ),
                     ),
                   ],
                 ),
               ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _smallStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    String? note,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: Colors.white, size: 18),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              if (note != null) ...[
+                const SizedBox(height: 4),
+                Text(note, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ]
             ],
           ),
         ),
@@ -821,39 +741,6 @@ class _EnhancedDashboardBossScreenState extends State<EnhancedDashboardBossScree
                     
                     const SizedBox(height: 12),
                     Divider(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
-                    
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildSummaryItem(
-                            title: 'Total Transaksi',
-                            value: '18,480',
-                            icon: Icons.summarize_rounded,
-                            color: const Color(0xFF3B82F6),
-                          ),
-                          _buildSummaryItem(
-                            title: 'Rata-rata/Bulan',
-                            value: '1,540',
-                            icon: Icons.trending_up_rounded,
-                            color: const Color(0xFF10B981),
-                          ),
-                          _buildSummaryItem(
-                            title: 'Pertumbuhan',
-                            value: '+12.5%',
-                            icon: Icons.arrow_upward_rounded,
-                            color: const Color(0xFFEF4444),
-                          ),
-                          _buildSummaryItem(
-                            title: 'Bulan Tertinggi',
-                            value: 'Okt/Des: 1,750',
-                            icon: Icons.emoji_events_rounded,
-                            color: const Color(0xFFF59E0B),
-                          ),
-                        ],
-                      ),
-                    ),
                   ],
                 ),
               ),
