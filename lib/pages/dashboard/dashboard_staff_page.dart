@@ -9,7 +9,7 @@ import '../screens/product_out_screen.dart';
 
 class DashboardStaffPage extends StatefulWidget {
   final String userRole;
-  const DashboardStaffPage({Key? key, required this.userRole}) : super(key: key);
+  const DashboardStaffPage({super.key, required this.userRole});
 
   @override
   _DashboardStaffPageState createState() => _DashboardStaffPageState();
