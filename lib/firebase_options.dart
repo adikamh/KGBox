@@ -41,48 +41,46 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDuAFg6TcPSEB3bL6osj1ZmpblqHDMIz5M',
-    appId: '1:868462308934:web:81d79ab254a6df6a70e447',
-    messagingSenderId: '868462308934',
-    projectId: 'kgbox-f93ae',
-    authDomain: 'kgbox-f93ae.firebaseapp.com',
-    storageBucket: 'kgbox-f93ae.firebasestorage.app',
+    apiKey: 'AIzaSyB5qGEAMMnTfNSc8-Z4XnF9c3nTEtLXH3Y',
+    appId: '1:140096059742:web:ee57d64e4c46515efdb7cf',
+    messagingSenderId: '140096059742',
+    projectId: 'kgbox-83b4d',
+    authDomain: 'kgbox-83b4d.firebaseapp.com',
+    storageBucket: 'kgbox-83b4d.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAZUwl2g_ejgPy_3_bmvpvCOwlEne72Zq4',
-    appId: '1:868462308934:android:053559afda3b843b70e447',
-    messagingSenderId: '868462308934',
-    projectId: 'kgbox-f93ae',
-    storageBucket: 'kgbox-f93ae.firebasestorage.app',
+    apiKey: 'AIzaSyCl12Ftnp6P6X7mDw2bcMQyw53_dvpMmZc',
+    appId: '1:140096059742:android:6016dc0103bbc980fdb7cf',
+    messagingSenderId: '140096059742',
+    projectId: 'kgbox-83b4d',
+    storageBucket: 'kgbox-83b4d.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyADAk_grNZGbAvVUiYj9fAJGfS6vFgMscE',
-    appId: '1:868462308934:ios:8ba6a257108b1d3170e447',
-    messagingSenderId: '868462308934',
-    projectId: 'kgbox-f93ae',
-    storageBucket: 'kgbox-f93ae.firebasestorage.app',
-    iosClientId: '868462308934-vhsfo4v111gitdb22ccsak658hml2941.apps.googleusercontent.com',
+    apiKey: 'AIzaSyA5Wk-b9c61SJAha0muPr0DWk6y8WNB99U',
+    appId: '1:140096059742:ios:1ef66b36f7237d68fdb7cf',
+    messagingSenderId: '140096059742',
+    projectId: 'kgbox-83b4d',
+    storageBucket: 'kgbox-83b4d.firebasestorage.app',
     iosBundleId: 'com.example.kgDns',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyADAk_grNZGbAvVUiYj9fAJGfS6vFgMscE',
-    appId: '1:868462308934:ios:8ba6a257108b1d3170e447',
-    messagingSenderId: '868462308934',
-    projectId: 'kgbox-f93ae',
-    storageBucket: 'kgbox-f93ae.firebasestorage.app',
-    iosClientId: '868462308934-vhsfo4v111gitdb22ccsak658hml2941.apps.googleusercontent.com',
+    apiKey: 'AIzaSyA5Wk-b9c61SJAha0muPr0DWk6y8WNB99U',
+    appId: '1:140096059742:ios:1ef66b36f7237d68fdb7cf',
+    messagingSenderId: '140096059742',
+    projectId: 'kgbox-83b4d',
+    storageBucket: 'kgbox-83b4d.firebasestorage.app',
     iosBundleId: 'com.example.kgDns',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDuAFg6TcPSEB3bL6osj1ZmpblqHDMIz5M',
-    appId: '1:868462308934:web:aa14261a4975006570e447',
-    messagingSenderId: '868462308934',
-    projectId: 'kgbox-f93ae',
-    authDomain: 'kgbox-f93ae.firebaseapp.com',
-    storageBucket: 'kgbox-f93ae.firebasestorage.app',
+    apiKey: 'AIzaSyB5qGEAMMnTfNSc8-Z4XnF9c3nTEtLXH3Y',
+    appId: '1:140096059742:web:1b142e10323157e9fdb7cf',
+    messagingSenderId: '140096059742',
+    projectId: 'kgbox-83b4d',
+    authDomain: 'kgbox-83b4d.firebaseapp.com',
+    storageBucket: 'kgbox-83b4d.firebasestorage.app',
   );
 }

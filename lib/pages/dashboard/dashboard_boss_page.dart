@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/manage_products_screen.dart';
+import '../screens/add_staff_screen.dart';
 import '../screens/product_out_screen.dart';
 
 class EnhancedDashboardBossScreen extends StatefulWidget {
@@ -308,14 +309,20 @@ class _EnhancedDashboardBossScreenState extends State<EnhancedDashboardBossScree
             // Akun Staff
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ManageProductsScreen(userRole: widget.userRole),
-                    ),
-                  );
-                },
+                  onTap: () async {
+                    final result = await Navigator.push<bool?>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AddStaffScreen(),
+                      ),
+                    );
+                    if (result == true && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Akun staff berhasil dibuat'),
+                        backgroundColor: Colors.green,
+                      ));
+                    }
+                  },
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
