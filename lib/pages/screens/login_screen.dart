@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../app.dart';
 import '../dashboard/dashboard_staff_page.dart';
 import '../dashboard/dashboard_boss_page.dart';
@@ -46,56 +49,87 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final username = _usernameController.text.trim();
       final password = _passwordController.text.trim();
+      // If input looks like an email (contains '@') we attempt Firebase Auth
+      final FirebaseAuth _auth = FirebaseAuth.instance;
+      final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-      final account = _availableAccounts.firstWhere(
-        (account) =>
-            account['username'] == username && account['password'] == password,
-        orElse: () => {},
-      );
+      if (username.contains('@')) {
+        // Email + password login using Firebase Auth
+        try {
+          final cred = await _auth.signInWithEmailAndPassword(
+            email: username,
+            password: password,
+          );
+          if (!mounted) return;
 
-      if (account.isNotEmpty) {
-        if (mounted) {
-          if (account['role'] == 'Owner/Boss') {
+          // Check if the signed-in email belongs to a staff document
+          final staffQuery = await _firestore
+              .collection('staff')
+              .where('email', isEqualTo: username)
+              .limit(1)
+              .get();
+
+          if (staffQuery.docs.isNotEmpty) {
+            // Staff user (registered by boss)
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (context) =>
-                    EnhancedDashboardBossScreen(userRole: account['role']!),
+                builder: (context) => DashboardStaffPage(userRole: 'Staff Gudang'),
               ),
             );
           } else {
+            // Treat as boss / owner (authenticated via Firebase)
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (context) => DashboardStaffPage(userRole: account['role']!),
+                builder: (context) => EnhancedDashboardBossScreen(userRole: 'Owner/Boss'),
               ),
             );
           }
+        } on FirebaseAuthException catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Gagal login: ${e.message}'),
+            backgroundColor: const Color(0xFFEF5350),
+          ));
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Gagal login: $e'),
+            backgroundColor: const Color(0xFFEF5350),
+          ));
         }
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Row(
-                children: [
-                  Icon(Icons.error_outline, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Username atau password salah',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
+        // Username-only login for staff: map username -> email@kgbox.local
+        try {
+          final mappedEmail = '$username@kgbox.local';
+          final staffQuery = await _firestore
+              .collection('staff')
+              .where('email', isEqualTo: mappedEmail)
+              .limit(1)
+              .get();
+
+          if (staffQuery.docs.isNotEmpty) {
+            if (!mounted) return;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DashboardStaffPage(userRole: 'Staff Gudang'),
               ),
-              backgroundColor: const Color(0xFFEF5350),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              margin: const EdgeInsets.all(16),
-            ),
-          );
+            );
+          } else {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Username tidak ditemukan'),
+              backgroundColor: Color(0xFFEF5350),
+            ));
+          }
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Gagal memeriksa username: $e'),
+            backgroundColor: const Color(0xFFEF5350),
+          ));
         }
       }
 
@@ -121,58 +155,56 @@ class _LoginScreenState extends State<LoginScreen> {
         final String email = googleUser.email;
         final String displayName = googleUser.displayName ?? 'User';
 
-        // Determine role based on email or other logic
-        // You can customize this logic based on your requirements
-        String role = 'Staff Gudang';
-        
-        // Example: Check if email contains 'boss' or matches specific domain
-        if (email.contains('boss') || email.endsWith('@company.com')) {
-          role = 'Owner/Boss';
-        }
+        // After Google sign-in, check Firestore 'staff' collection to determine routing
+        final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+        final staffQuery = await _firestore
+            .collection('staff')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
 
-        if (mounted) {
-          // Show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle_outline, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Selamat datang, $displayName!',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
+        if (!mounted) return;
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Selamat datang, $displayName!',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                ],
-              ),
-              backgroundColor: const Color(0xFF66BB6A),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              margin: const EdgeInsets.all(16),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF66BB6A),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (staffQuery.docs.isNotEmpty) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DashboardStaffPage(userRole: 'Staff Gudang'),
             ),
           );
-
-          // Navigate to appropriate dashboard
-          await Future.delayed(const Duration(milliseconds: 500));
-          
-          if (role == 'Owner/Boss') {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => EnhancedDashboardBossScreen(userRole: role),
-              ),
-            );
-          } else {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DashboardStaffPage(userRole: role),
-              ),
-            );
-          }
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EnhancedDashboardBossScreen(userRole: 'Owner/Boss'),
+            ),
+          );
         }
       }
     } catch (error) {
