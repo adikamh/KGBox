@@ -50,6 +50,8 @@ class _AddProductPageState extends State<AddProductPage> {
     );
     
     _selectedCategory = _controller.selectedCategory;
+    // Ensure code field shows initial generated code
+    _codeController.text = _controller.productCode;
   }
 
   @override
@@ -122,7 +124,6 @@ class _AddProductPageState extends State<AddProductPage> {
                 }
                 return null;
               },
-              onChanged: (value) => _controller.updateProductCode(),
             ),
             
             // Kode Produk
@@ -318,8 +319,8 @@ class _AddProductPageState extends State<AddProductPage> {
             if (value != null) {
               setState(() {
                 _selectedCategory = value;
-                _controller.selectedCategory = value;
-                _controller.updateProductCode();
+                _controller.updateCategory(value);
+                _codeController.text = _controller.productCode;
               });
             }
           },

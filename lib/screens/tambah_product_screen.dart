@@ -66,6 +66,11 @@ class AddProductScreen {
     final random = DateTime.now().millisecondsSinceEpoch.toString().substring(8);
     return '$namePrefix$catPrefix$random';
   }
+
+  void updateCategory(String category) {
+    selectedCategory = category;
+    // Do not regenerate productCode on category change to keep code stable.
+  }
   
   // Validate form
   Map<String, String?> validateForm() {
@@ -167,15 +172,6 @@ class AddProductScreen {
      );
     
      return result;
-  }
-  
-  // Update product code when name changes
-  void updateProductCode() {
-    if (codeController != null && nameController != null) {
-      final newCode = _generateProductCode();
-      codeController!.text = newCode;
-      productCode = newCode;
-    }
   }
   
   // Select date for expired

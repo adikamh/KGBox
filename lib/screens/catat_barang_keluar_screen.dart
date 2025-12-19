@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/config.dart';
 import '../services/restapi.dart';
@@ -199,35 +200,45 @@ class _ScannerScreenState extends State<ScannerScreen>
   }
 
   void onBarcodeDetect(String barcode) {
+    final code = barcode.trim();
+    if (code.isEmpty) return;
     if (_isProcessing) return;
-    if (_lastScannedCode == barcode) return;
+    if (_lastScannedCode == code) return;
 
-    _lastScannedCode = barcode;
+    _lastScannedCode = code;
     _isProcessing = true;
 
     final foundProduct = widget.allProducts.firstWhere(
-      (p) => p['id'].toString().contains(barcode) || p['nama'].toString().contains(barcode),
+      (p) {
+        final idStr = (p['id'] ?? '').toString();
+        final idProduct = (p['full'] != null && p['full']['id_product'] != null)
+            ? p['full']['id_product'].toString()
+            : '';
+        final nameStr = (p['nama'] ?? '').toString();
+        return idStr == code || idProduct == code || idStr.contains(code) || idProduct.contains(code) || nameStr.toLowerCase() == code.toLowerCase();
+      },
       orElse: () => <String, dynamic>{},
     );
 
     if (foundProduct.isNotEmpty) {
-      final existingIndex = widget.scannedProducts.indexWhere(
-        (p) => p['id'] == foundProduct['id']
-      );
+      final existingIndex = widget.scannedProducts.indexWhere((p) => p['id'] == foundProduct['id']);
+      setState(() {
+        if (existingIndex >= 0) {
+          widget.scannedProducts[existingIndex]['jumlah'] = (widget.scannedProducts[existingIndex]['jumlah'] ?? 0) + 1;
+        } else {
+          widget.scannedProducts.add({
+            ...foundProduct,
+            'jumlah': 1,
+          });
+        }
+      });
 
-      if (existingIndex >= 0) {
-        widget.scannedProducts[existingIndex]['jumlah']++;
-      } else {
-        widget.scannedProducts.add({
-          ...foundProduct,
-          'jumlah': 1,
-        });
-      }
-
+      HapticFeedback.mediumImpact();
       widget.onProductsChanged(List.from(widget.scannedProducts));
       showSnackbar('${foundProduct['nama']} ditambahkan', isError: false);
     } else {
-      showSnackbar('Produk tidak ditemukan', isError: true);
+      HapticFeedback.vibrate();
+      showSnackbar('Produk tidak ditemukan: $code', isError: true);
     }
 
     Future.delayed(const Duration(milliseconds: 800), () {
