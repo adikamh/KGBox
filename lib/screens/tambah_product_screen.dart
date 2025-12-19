@@ -1,5 +1,6 @@
 // lib/screens/add_product_screen.dart
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import '../pages/barcode_scanner_page.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
@@ -122,6 +123,9 @@ class AddProductScreen {
       };
     }
     
+    final int jumlah = int.tryParse(jumlahController!.text.trim()) ?? 0;
+    final List<String> barcodeList = List<String>.filled(jumlah, codeController?.text ?? productId);
+
     final product = ProductModel(
       id: productId,
       id_product: productId,
@@ -131,23 +135,19 @@ class AddProductScreen {
       tanggal_beli: _formatCurrentDateTime(),
       harga_product: hargaController!.text.trim(),
       jumlah_produk: jumlahController!.text.trim(),
+      barcode_list: barcodeList,
+      ownerid: ownerId ?? '',
       tanggal_expired: tanggalExpiredController!.text.trim(),
     );
     
     try {
-      await _dataService.insertProduct(
-        appid,
-        product.id_product,
-        product.nama_product,
-        product.kategori_product,
-        product.merek_product,
-        product.tanggal_beli,
-        product.harga_product,
-        product.jumlah_produk,
-        product.tanggal_expired,
-        ownerId ?? '',
-      );
-      
+      final data = Map<String, dynamic>.from(product.toJson());
+      // Ensure barcode_list stored as JSON string for API
+      data['barcode_list'] = jsonEncode(product.barcode_list);
+      // Ensure owner id is included
+      data['ownerid'] = ownerId ?? '';
+      await _dataService.insertOne(token, project, 'product', appid, data);
+
       return {
         'success': true,
         'message': 'Produk berhasil ditambahkan',
@@ -161,9 +161,63 @@ class AddProductScreen {
       };
     }
   }
+
+  // Add products from scanned barcodes: create one product per barcode occurrence.
+  Future<Map<String, dynamic>> addProductsFromScans(List<String> barcodes) async {
+    // Validate required fields (except jumlah which will be per-item)
+    final errors = validateForm();
+    errors.remove('jumlah');
+    if (errors.isNotEmpty) {
+      return {
+        'success': false,
+        'message': 'Validasi gagal',
+        'errors': errors,
+      };
+    }
+
+    final List<Map<String, dynamic>> results = [];
+
+    for (final barcode in barcodes) {
+      final prodId = barcode.isNotEmpty ? barcode : _generateProductId();
+      final product = ProductModel(
+        id: prodId,
+        id_product: prodId,
+        nama_product: nameController!.text.trim(),
+        kategori_product: selectedCategory,
+        merek_product: merekController!.text.trim(),
+        tanggal_beli: _formatCurrentDateTime(),
+        harga_product: hargaController!.text.trim(),
+        jumlah_produk: '1',
+        barcode_list: [barcode],
+        ownerid: ownerId ?? '',
+        tanggal_expired: tanggalExpiredController!.text.trim(),
+      );
+
+      try {
+        final data = Map<String, dynamic>.from(product.toJson());
+        data['barcode_list'] = jsonEncode([barcode]);
+        data['ownerid'] = ownerId ?? '';
+        await _dataService.insertOne(token, project, 'product', appid, data);
+        results.add({'barcode': barcode, 'success': true, 'product': product.toJson()});
+      } catch (e) {
+        results.add({'barcode': barcode, 'success': false, 'error': e.toString()});
+      }
+    }
+
+    final successCount = results.where((r) => r['success'] == true).length;
+    final failCount = results.length - successCount;
+
+    return {
+      'success': failCount == 0,
+      'message': 'Batch insert selesai',
+      'results': results,
+      'total': results.length,
+    };
+  }
   
-  // Scan barcode callback
-  Future<String?> scanBarcode(BuildContext context) async {
+  // Scan barcode callback - returns either a String (single barcode)
+  // or a Map<String,int> of scanned barcode counts when multi-scan used.
+  Future<dynamic> scanBarcode(BuildContext context) async {
      final result = await Navigator.push(
        context,
        MaterialPageRoute(

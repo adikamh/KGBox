@@ -106,6 +106,40 @@ class ListProductScreen {
       return true;
     }).toList();
   }
+
+  // Return display products grouped by name (aggregate stock)
+  List<Map<String, dynamic>> getDisplayProducts(String searchQuery) {
+    final filtered = getFilteredProducts(searchQuery);
+
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    for (var p in filtered) {
+      final name = p['name'] as String? ?? 'Produk';
+      grouped.putIfAbsent(name, () => []).add(p);
+    }
+
+    final List<Map<String, dynamic>> display = [];
+    grouped.forEach((name, items) {
+      // Aggregate stock and pick representative fields
+      final totalStock = items.fold<int>(0, (sum, it) => sum + (it['stock'] as int));
+      // pick latest updated
+      items.sort((a, b) => (b['updated'] as DateTime).compareTo(a['updated'] as DateTime));
+      final rep = items.first;
+
+      display.add({
+        'name': name,
+        'category': rep['category'],
+        'price': rep['price'],
+        'stock': totalStock,
+        'updated': rep['updated'],
+        'brand': rep['brand'],
+        'expired': rep['expired'],
+        // keep original items for detail view
+        'full': items.map((it) => it['full']).toList(),
+      });
+    });
+
+    return display;
+  }
   
   // Delete product
   Future<Map<String, dynamic>> deleteProduct(String productId) async {
@@ -135,6 +169,43 @@ class ListProductScreen {
         'message': 'Terjadi kesalahan: $e',
       };
     }
+  }
+
+  // Update multiple items with the same fields
+  Future<Map<String, dynamic>> updateItemsFields(List<Map<String, dynamic>> items, Map<String, String> fields) async {
+    if (fields.isEmpty) return {'success': false, 'message': 'No fields to update'};
+    final List<Map<String, dynamic>> results = [];
+
+    final fieldList = fields.keys.join(',');
+    final valueList = fields.values.map((v) => v.replaceAll(',', '\\,')).join(',');
+
+    for (final item in items) {
+      final id = (item['id'] ?? item['id_product'] ?? '').toString();
+      if (id.isEmpty) continue;
+      try {
+        final ok = await _dataService.updateId(
+          fieldList,
+          valueList,
+          token,
+          project,
+          collection,
+          appid,
+          id,
+        );
+        results.add({'id': id, 'success': ok});
+      } catch (e) {
+        results.add({'id': id, 'success': false, 'error': e.toString()});
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    final updatedCount = results.where((r) => r['success'] == true).length;
+    return {
+      'success': updatedCount == results.length,
+      'updatedCount': updatedCount,
+      'results': results,
+      'message': 'Updated $updatedCount of ${results.length} items',
+    };
   }
   
   // Show delete confirmation dialog
@@ -172,6 +243,25 @@ class ListProductScreen {
     BuildContext context,
     Map<String, dynamic> product,
   ) {
+     // If 'full' contains a list of items (grouped), build an aggregated map
+     final full = product['full'];
+     if (full is List) {
+       final items = full.cast<Map<String, dynamic>>();
+       // aggregate into a single map expected by DetailProductPage
+       final int totalStock = items.fold<int>(0, (s, it) => s + (_safeInt(it['jumlah_produk'])));
+       final Map<String, dynamic> agg = Map<String, dynamic>.from(items.first);
+       agg['jumlah_produk'] = totalStock.toString();
+       agg['items'] = items; // attach individual units
+
+       Navigator.push(
+         context,
+         MaterialPageRoute(
+           builder: (_) => DetailProductPage(product: agg),
+         ),
+       );
+       return;
+     }
+
      Navigator.push(
        context,
        MaterialPageRoute(
@@ -180,17 +270,20 @@ class ListProductScreen {
      );
   }
   
-  // Navigate to edit screen
-  void navigateToEdit(
+  // Navigate to edit screen and return updated product map (if any)
+  Future<Map<String, dynamic>?> navigateToEdit(
     BuildContext context,
     Map<String, dynamic> product,
-  ) {
-     Navigator.push(
+  ) async {
+     final full = product['full'];
+     final Map<String, dynamic> target = (full is List && full.isNotEmpty) ? full.first as Map<String, dynamic> : (full as Map<String, dynamic>);
+     final result = await Navigator.push<Map<String, dynamic>?>(
        context,
        MaterialPageRoute(
-         builder: (_) => EditProductPage(product: ProductModel.fromJson(product['full'])),
+         builder: (_) => EditProductPage(product: ProductModel.fromJson(target)),
        ),
     );
+    return result;
   }
   
   // Helper methods

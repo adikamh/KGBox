@@ -222,18 +222,18 @@ class _ListProductPageState extends State<ListProductPage> {
       return _buildLoadingState();
     }
 
-    final filteredProducts = _controller.getFilteredProducts(_searchController.text);
-    
-    if (filteredProducts.isEmpty) {
+    final displayProducts = _controller.getDisplayProducts(_searchController.text);
+
+    if (displayProducts.isEmpty) {
       return _buildEmptyState();
     }
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      itemCount: filteredProducts.length,
+      itemCount: displayProducts.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        final product = filteredProducts[index];
+        final product = displayProducts[index];
         return _buildProductCard(product);
       },
     );
@@ -326,12 +326,32 @@ class _ListProductPageState extends State<ListProductPage> {
                               ),
                             ),
                             PopupMenuItem(
+                              value: 4,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.edit_square, size: 18, color: Colors.blue),
+                                  const SizedBox(width: 10),
+                                  const Text('Edit Semua Unit', style: TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
                               value: 2,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.remove_circle_outline, size: 18, color: Colors.orange),
+                                  const SizedBox(width: 10),
+                                  const Text('Hapus Satu Unit', style: TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 3,
                               child: Row(
                                 children: [
                                   const Icon(Icons.delete_rounded, size: 18, color: Colors.red),
                                   const SizedBox(width: 10),
-                                  const Text('Hapus', style: TextStyle(fontSize: 13)),
+                                  const Text('Hapus Semua Unit', style: TextStyle(fontSize: 13)),
                                 ],
                               ),
                             ),
@@ -339,8 +359,12 @@ class _ListProductPageState extends State<ListProductPage> {
                           onSelected: (value) async {
                             if (value == 1) {
                               _controller.navigateToEdit(context, product);
+                            } else if (value == 4) {
+                              await _handleEditAllUnits(product);
                             } else if (value == 2) {
-                              await _handleDeleteProduct(product);
+                              await _handleDeleteSingleUnit(product);
+                            } else if (value == 3) {
+                              await _handleDeleteAllUnits(product);
                             }
                           },
                         ),
@@ -522,9 +546,19 @@ class _ListProductPageState extends State<ListProductPage> {
       context,
       product['name'],
     );
-    
+
     if (confirm == true) {
-      final result = await _controller.deleteProduct(product['id']);
+      // If grouped entry, delete first underlying item by id
+      final full = product['full'];
+      String targetId = '';
+      if (full is List && full.isNotEmpty) {
+        final first = full.first as Map<String, dynamic>;
+        targetId = first['id']?.toString() ?? first['id_product']?.toString() ?? '';
+      } else if (full is Map) {
+        targetId = full['id']?.toString() ?? full['id_product']?.toString() ?? '';
+      }
+
+      final result = await _controller.deleteProduct(targetId);
       
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -542,6 +576,143 @@ class _ListProductPageState extends State<ListProductPage> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _handleDeleteSingleUnit(Map<String, dynamic> product) async {
+    final full = product['full'];
+    if (full is! List || full.isEmpty) {
+      // fallback to normal delete
+      await _handleDeleteProduct(product);
+      return;
+    }
+
+    // Let user pick which unit to delete
+    final selected = await showModalBottomSheet<String?>(
+      context: context,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (ctx) {
+        return ListView(
+          shrinkWrap: true,
+          children: full.map<Widget>((item) {
+            final m = item as Map<String, dynamic>;
+            final id = m['id']?.toString() ?? m['id_product']?.toString() ?? '';
+            final barcode = (() {
+              final raw = m['barcode_list'] ?? '';
+              if (raw is List) return raw.join(', ');
+              return raw.toString();
+            })();
+            return ListTile(
+              title: Text(id),
+              subtitle: Text(barcode),
+              onTap: () => Navigator.of(ctx).pop(id),
+            );
+          }).toList(),
+        );
+      },
+    );
+
+    if (selected == null || selected.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('Konfirmasi'),
+        content: const Text('Hapus unit ini?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Batal')),
+          TextButton(onPressed: () => Navigator.pop(dctx, true), child: const Text('Hapus')),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final result = await _controller.deleteProduct(selected);
+    if (result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['message']), backgroundColor: Colors.green),
+      );
+      await _refreshProducts();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['message']), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _handleDeleteAllUnits(Map<String, dynamic> product) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('Konfirmasi Hapus Semua'),
+        content: const Text('Apakah Anda yakin ingin menghapus semua unit untuk produk ini?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Batal')),
+          TextButton(onPressed: () => Navigator.pop(dctx, true), child: const Text('Hapus Semua')),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final full = product['full'];
+    if (full is! List || full.isEmpty) {
+      // fallback
+      await _handleDeleteProduct(product);
+      return;
+    }
+
+    int success = 0;
+    for (final item in full) {
+      final m = item as Map<String, dynamic>;
+      final id = m['id']?.toString() ?? m['id_product']?.toString() ?? '';
+      if (id.isEmpty) continue;
+      final res = await _controller.deleteProduct(id);
+      if (res['success'] == true) success++;
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Hapus selesai: $success unit berhasil dihapus.'), backgroundColor: Colors.green),
+    );
+    await _refreshProducts();
+  }
+
+  Future<void> _handleEditAllUnits(Map<String, dynamic> product) async {
+    final full = product['full'];
+    if (full is! List || full.isEmpty) {
+      _controller.navigateToEdit(context, product);
+      return;
+    }
+
+    // Open edit page for the first unit, then apply returned changes to all units
+    final first = full.first as Map<String, dynamic>;
+    final updated = await _controller.navigateToEdit(context, {
+      'full': first,
+    });
+
+    if (updated == null) return;
+
+    // Build fields to update from returned product map
+    final fields = <String, String>{};
+    final keys = ['nama_product', 'kategori_product', 'merek_product', 'tanggal_beli', 'harga_product', 'jumlah_produk', 'tanggal_expired'];
+    for (final k in keys) {
+      if (updated[k] != null) fields[k] = updated[k].toString();
+    }
+
+    // Collect ids
+    final List<Map<String, dynamic>> items = full.map<Map<String, dynamic>>((e) => e as Map<String, dynamic>).toList();
+    final res = await _controller.updateItemsFields(items, fields);
+    if (res['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Perubahan diterapkan ke ${res['updatedCount'] ?? 0} unit.'), backgroundColor: Colors.green),
+      );
+      await _refreshProducts();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(res['message'] ?? 'Gagal memperbarui semua unit'), backgroundColor: Colors.red),
+      );
     }
   }
 }
