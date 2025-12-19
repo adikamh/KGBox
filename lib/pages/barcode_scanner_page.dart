@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../screens/barcode_scanner_screen.dart';
+import 'tambah_product_page.dart';
 
 class BarcodeScannerPage extends StatefulWidget {
   final String userRole;
@@ -258,22 +259,19 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage>
   }
 
   void _navigateToAddProduct(String barcode) {
-    // Import AddProductModel
-    // Navigator.pushReplacement(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (_) => AddProdukScreen(
-    //       barcode: barcode,
-    //       userRole: widget.userRole,
-    //     ),
-    //   ),
-    // );
-    
-    // For now, show snackbar
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Barcode: $barcode\nNavigating to Add Product...'),
         duration: const Duration(seconds: 2),
+      ),
+    );
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddProductPage(
+          barcode: barcode,
+          userRole: widget.userRole,
+        ),
       ),
     );
   }
