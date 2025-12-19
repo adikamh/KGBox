@@ -42,6 +42,41 @@ class DetailProductPage extends StatelessWidget {
                   // Product Information Card
                   _buildInfoCard(_controller, formattedProduct),
                   
+                  const SizedBox(height: 16),
+                  // If product has multiple units, show list of unit ids
+                  Builder(builder: (ctx) {
+                    final units = _controller.getItemUnits();
+                    if (units.length <= 1) return const SizedBox.shrink();
+                    return Card(
+                      elevation: 0,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Unit Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 8),
+                            ...units.map((u) {
+                              final id = u['id'] ?? u['id_product'] ?? u['id_product']?.toString() ?? '';
+                              final barcodeList = (() {
+                                final raw = u['barcode_list'] ?? u['kode_barcodes'] ?? '';
+                                if (raw is String) return raw;
+                                if (raw is List) return raw.join(', ');
+                                return raw.toString();
+                              })();
+                              return ListTile(
+                                dense: true,
+                                title: Text(id.toString()),
+                                // ignore: dead_code
+                                subtitle: Text(barcodeList ?? ''),
+                              );
+                            }).toList(),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+
                   const SizedBox(height: 24),
                   
                   // Action Buttons
