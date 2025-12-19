@@ -50,6 +50,8 @@ class _AddProductPageState extends State<AddProductPage> {
     );
     
     _selectedCategory = _controller.selectedCategory;
+    // Ensure code field shows initial generated code
+    _codeController.text = _controller.productCode;
   }
 
   @override
@@ -122,7 +124,6 @@ class _AddProductPageState extends State<AddProductPage> {
                 }
                 return null;
               },
-              onChanged: (value) => _controller.updateProductCode(),
             ),
             
             // Kode Produk
@@ -318,8 +319,8 @@ class _AddProductPageState extends State<AddProductPage> {
             if (value != null) {
               setState(() {
                 _selectedCategory = value;
+                // Update controller's selectedCategory but do NOT change product code
                 _controller.selectedCategory = value;
-                _controller.updateProductCode();
               });
             }
           },
@@ -412,6 +413,12 @@ class _AddProductPageState extends State<AddProductPage> {
     if (scannedCode != null && mounted) {
       setState(() {
         _codeController.text = scannedCode;
+        // Ensure controller uses scanned barcode as product id/code so saving uses barcode
+        _controller.productId = scannedCode;
+        _controller.productCode = scannedCode;
+        if (_controller.codeController != null) {
+          _controller.codeController!.text = scannedCode;
+        }
       });
     }
   }

@@ -5,7 +5,7 @@ import '../providers/auth_provider.dart';
 import '../pages/barcode_scanner_page.dart';
 import '../pages/tambah_product_page.dart';
 import '../pages/list_product_page.dart';
-import '../pages/catat_barang_keluar_page.dart';
+import '../screens/catat_barang_keluar_screen.dart';
 
 class DashboardStaffScreen {
   // Data management
@@ -75,7 +75,38 @@ class DashboardStaffScreen {
        MaterialPageRoute(
          builder: (_) => const BarcodeScannerPage(userRole: ''),
        ),
-     );
+     ).then((result) {
+       // If scanner returned a barcode, navigate to AddProductPage with that barcode and ownerId
+       if (result != null && result is String && result.isNotEmpty) {
+         try {
+           final auth = Provider.of<AuthProvider>(context, listen: false);
+           final user = auth.currentUser;
+           final ownerId = user?.ownerId ?? user?.id ?? '';
+
+           Navigator.push(
+             context,
+             MaterialPageRoute(
+               builder: (_) => AddProductPage(
+                 userRole: '',
+                 barcode: result,
+                 ownerId: ownerId,
+               ),
+             ),
+           );
+         } catch (e) {
+           // Fallback: open without ownerId
+           Navigator.push(
+             context,
+             MaterialPageRoute(
+               builder: (_) => AddProductPage(
+                 userRole: '',
+                 barcode: result,
+               ),
+             ),
+           );
+         }
+       }
+     });
   }
 
   void navigateToViewProducts(BuildContext context) {
@@ -113,16 +144,7 @@ class DashboardStaffScreen {
      Navigator.push(
        context,
        MaterialPageRoute(
-         builder: (_) => CatatBarangKeluarPage(
-           namaTokoController: TextEditingController(),
-           alamatTokoController: TextEditingController(),
-           namaPemilikController: TextEditingController(),
-           scannedProducts: [],
-           total: 0,
-           onScanPressed: () {},
-           onSubmitPressed: () {},
-           onQuantityChanged: (index, quantity) {},
-         ),
+         builder: (_) => const CatatBarangKeluarScreen(),
        ),
      );
   }

@@ -49,6 +49,47 @@ class DataService {
       }
    }
 
+      // Generic insert for any collection
+      Future insertOne(String token, String project, String collection, String appid, Map<String, dynamic> data) async {
+         final String uri = 'https://api.247go.app/v5/insert/';
+         try {
+            final body = Map<String, String>.fromEntries(data.entries.map((e) => MapEntry(e.key, e.value?.toString() ?? '')));
+            body.addAll({
+              'token': token,
+              'project': project,
+              'collection': collection,
+              'appid': appid,
+            });
+            final response = await http.post(Uri.parse(uri), body: body).timeout(const Duration(seconds: 15));
+            return response.body;
+         } catch (e) {
+            print('insertOne error: $e');
+            rethrow;
+         }
+      }
+
+      // Generic update by id (best-effort stub). Returns true on success.
+      Future<bool> updateOne(String token, String project, String collection, String appid, String id, Map<String, dynamic> updateData) async {
+         // This method attempts to call an update endpoint; if API differs, treat as no-op success to avoid crashing.
+         try {
+            final String uri = 'https://api.247go.app/v5/update_id/' + collection;
+            final body = Map<String, String>.fromEntries(updateData.entries.map((e) => MapEntry(e.key, e.value?.toString() ?? '')));
+            body.addAll({
+              'token': token,
+              'project': project,
+              'collection': collection,
+              'appid': appid,
+              'id': id,
+            });
+            final response = await http.post(Uri.parse(uri), body: body).timeout(const Duration(seconds: 15));
+            return response.statusCode == 200;
+         } catch (e) {
+            print('updateOne error: $e');
+            // don't fail hard; return false
+            return false;
+         }
+      }
+
    Future updateId(String update_field, String update_value, String token, 
          String project, String collection, String appid, String id) async {
       // Use documented endpoint: POST /v5/update_id/product (form-data)

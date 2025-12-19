@@ -5,22 +5,28 @@ class CatatBarangKeluarPage extends StatelessWidget {
   final TextEditingController namaTokoController;
   final TextEditingController alamatTokoController;
   final TextEditingController namaPemilikController;
+  final TextEditingController noTeleponController;
   final List<Map<String, dynamic>> scannedProducts;
   final double total;
   final VoidCallback onScanPressed;
+  final VoidCallback onSelectProductPressed;
   final VoidCallback onSubmitPressed;
   final Function(int, int) onQuantityChanged;
+  final bool isLoading;
 
   const CatatBarangKeluarPage({
     super.key,
     required this.namaTokoController,
     required this.alamatTokoController,
     required this.namaPemilikController,
+    required this.noTeleponController,
     required this.scannedProducts,
     required this.total,
     required this.onScanPressed,
+    required this.onSelectProductPressed,
     required this.onSubmitPressed,
     required this.onQuantityChanged,
+    this.isLoading = false,
   });
 
   @override
@@ -32,31 +38,49 @@ class CatatBarangKeluarPage extends StatelessWidget {
         backgroundColor: const Color(0xFF2965C0),
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // FORM DETAIL TOKO
-            _buildTokoForm(),
-            const SizedBox(height: 20),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // FORM DETAIL TOKO
+                _buildTokoForm(),
+                const SizedBox(height: 20),
 
-            // TOMBOL SCAN
-            _buildScanButton(),
-            const SizedBox(height: 20),
+                // TOMBOL SCAN
+                _buildScanButton(),
+                const SizedBox(height: 8),
+                _buildSelectButton(),
+                const SizedBox(height: 20),
 
-            // LIST BARANG YANG SUDAH DI-SCAN
-            if (scannedProducts.isNotEmpty) ...[
-              _buildSummaryCard(),
-              const SizedBox(height: 12),
-              _buildProductList(),
-              const SizedBox(height: 20),
-            ],
+                // LIST BARANG YANG SUDAH DI-SCAN
+                if (scannedProducts.isNotEmpty) ...[
+                  _buildSummaryCard(),
+                  const SizedBox(height: 12),
+                  _buildProductList(),
+                  const SizedBox(height: 20),
+                ],
 
-            // TOMBOL SIMPAN
-            _buildSubmitButton(),
-          ],
-        ),
+                // TOMBOL SIMPAN
+                _buildSubmitButton(),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+          
+          // Loading Overlay
+          if (isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2965C0)),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -78,7 +102,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Detail Toko Tujuan',
+            'Detail Customer',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -91,6 +115,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
             label: 'Nama Toko',
             hint: 'Contoh: Toko Sejahtera',
             icon: Icons.store,
+            keyboardType: TextInputType.text,
           ),
           const SizedBox(height: 12),
           _buildTextField(
@@ -99,6 +124,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
             hint: 'Contoh: Jl. Merdeka No. 123',
             icon: Icons.location_on,
             maxLines: 2,
+            keyboardType: TextInputType.streetAddress,
           ),
           const SizedBox(height: 12),
           _buildTextField(
@@ -106,6 +132,15 @@ class CatatBarangKeluarPage extends StatelessWidget {
             label: 'Nama Pemilik',
             hint: 'Contoh: Budi Santoso',
             icon: Icons.person,
+            keyboardType: TextInputType.text,
+          ),
+          const SizedBox(height: 12),
+          _buildTextField(
+            controller: noTeleponController,
+            label: 'No Telepon',
+            hint: 'Contoh: 081234567890',
+            icon: Icons.phone,
+            keyboardType: TextInputType.phone,
           ),
         ],
       ),
@@ -118,6 +153,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
     required String hint,
     required IconData icon,
     int maxLines = 1,
+    TextInputType keyboardType = TextInputType.text,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -134,6 +170,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
         TextField(
           controller: controller,
           maxLines: maxLines,
+          keyboardType: keyboardType,
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Icon(icon, color: const Color(0xFF2965C0)),
@@ -174,6 +211,24 @@ class CatatBarangKeluarPage extends StatelessWidget {
     );
   }
 
+  Widget _buildSelectButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onSelectProductPressed,
+        icon: const Icon(Icons.list_alt),
+        label: const Text('Pilih Produk'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFF2965C0),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSummaryCard() {
     final formattedTotal = total.toStringAsFixed(0).replaceAllMapped(
       RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
@@ -187,13 +242,26 @@ class CatatBarangKeluarPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFF2965C0).withOpacity(0.3)),
       ),
-      child: Text(
-        '${scannedProducts.length} barang | Total: Rp $formattedTotal',
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF2965C0),
-        ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '${scannedProducts.length} barang',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2965C0),
+            ),
+          ),
+          Text(
+            'Total: Rp $formattedTotal',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2965C0),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -244,7 +312,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  product['nama'],
+                  product['nama'] ?? 'Tanpa Nama',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -254,12 +322,20 @@ class CatatBarangKeluarPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Rp $hargaInt × $jumlahInt = Rp ${hargaInt * jumlahInt}',
+                  'Rp ${hargaInt.toStringAsFixed(0)} × $jumlahInt = Rp ${(hargaInt * jumlahInt).toStringAsFixed(0)}',
                   style: const TextStyle(
                     fontSize: 11,
                     color: Colors.grey,
                   ),
                 ),
+                if (product['id'] != null)
+                  Text(
+                    'ID: ${product['id']}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -278,11 +354,18 @@ class CatatBarangKeluarPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              Text(
-                jumlahInt.toString(),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  jumlahInt.toString(),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
@@ -309,7 +392,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: onSubmitPressed,
+        onPressed: isLoading ? null : onSubmitPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.green,
           foregroundColor: Colors.white,
@@ -318,16 +401,25 @@ class CatatBarangKeluarPage extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
           ),
         ),
-        child: const Text(
-          'Simpan Pengiriman',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
+        child: isLoading
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Text(
+                'Simpan Pengiriman',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
       ),
     );
   }
 }
 
-// Scanner Page UI
+// Scanner Page UI (Remains the same as before)
 class ScannerPage extends StatelessWidget {
   final MobileScannerController controller;
   final Animation<double> scanLineAnim;
