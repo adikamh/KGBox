@@ -265,14 +265,7 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage>
         duration: const Duration(seconds: 2),
       ),
     );
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AddProductPage(
-          barcode: barcode,
-          userRole: widget.userRole,
-        ),
-      ),
-    );
+    // Return barcode to caller (e.g. AddProductPage) instead of pushing another page
+    Navigator.pop(context, barcode);
   }
 }
