@@ -7,9 +7,6 @@ import 'package:provider/provider.dart';
 import '../services/config.dart';
 import '../services/restapi.dart';
 import '../pages/catat_barang_keluar_page.dart';
-import '../models/customer_model.dart';
-import '../models/order_model.dart';
-import '../models/order_items_model.dart';
 import '../providers/auth_provider.dart';
 import '../pages/tambah_product_page.dart';
 
@@ -243,6 +240,7 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
         'alamat_toko': _alamatTokoController.text.trim(),
       };
 
+      // ignore: unused_local_variable
       final customerResult = await api.insertOne(
         token,
         project,
@@ -271,6 +269,7 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
         'alamat_toko': _alamatTokoController.text.trim(),
       };
 
+      // ignore: unused_local_variable
       final orderResult = await api.insertOne(
         token,
         project,

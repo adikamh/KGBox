@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
+import '../pages/expired_page.dart';
 
 class ExpiredScreen extends StatefulWidget {
   const ExpiredScreen({super.key});
@@ -52,25 +53,6 @@ class _ExpiredScreenState extends State<ExpiredScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Kadaluarsa')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: _expired.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (context, index) {
-                final row = _expired[index];
-                final p = row['full'] as Map<String, dynamic>;
-                final nama = p['nama_product'] ?? p['nama'] ?? 'Tanpa Nama';
-                final exp = row['expired_at'];
-                return ListTile(
-                  title: Text(nama),
-                  subtitle: Text('Kadaluarsa: $exp'),
-                );
-              },
-            ),
-    );
+    return ExpiredPage(items: _expired, loading: _loading);
   }
 }
