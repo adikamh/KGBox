@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
+import '../pages/bestseller_page.dart';
 
 class BestSellerScreen extends StatefulWidget {
   const BestSellerScreen({super.key});
@@ -43,6 +44,24 @@ class _BestSellerScreenState extends State<BestSellerScreen> {
       final list = agg.values.toList();
       list.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
+      // enrich with product name by fetching product records
+      for (final entry in list) {
+        final idProd = (entry['id_product'] ?? '').toString();
+        try {
+          final prodRes = await _api.selectWhere(token, project, 'product', appid, 'id_product', idProd).timeout(const Duration(seconds: 10));
+          final prodJson = json.decode(prodRes);
+          final prodData = (prodJson['data'] ?? []);
+          if (prodData.isNotEmpty) {
+            final p = prodData[0] as Map<String, dynamic>;
+            entry['nama'] = p['nama_product'] ?? p['nama'] ?? idProd;
+          } else {
+            entry['nama'] = entry['sample']?['nama'] ?? idProd;
+          }
+        } catch (_) {
+          entry['nama'] = entry['sample']?['nama'] ?? idProd;
+        }
+      }
+
       setState(() {
         _items = List<Map<String, dynamic>>.from(list);
       });
@@ -55,30 +74,6 @@ class _BestSellerScreenState extends State<BestSellerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Best Seller')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: _items.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (context, index) {
-                final it = _items[index];
-                final rank = index + 1;
-                final count = it['count'] ?? 0;
-                final id = it['id_product'] ?? '';
-
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: rank <= 3 ? Colors.orange : Colors.grey.shade300,
-                    child: Text('$rank', style: const TextStyle(color: Colors.white)),
-                  ),
-                  title: Text(id.toString()),
-                  subtitle: Text('Terjual: $count'),
-                );
-              },
-            ),
-    );
+    return BestSellerPage(items: _items, loading: _loading);
   }
 }

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../screens/barcode_scanner_screen.dart';
+// ignore: unused_import
 import 'tambah_product_page.dart';
 
 class BarcodeScannerPage extends StatefulWidget {

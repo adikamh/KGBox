@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
+import '../pages/pengiriman_page.dart';
 
 class PengirimanScreen extends StatefulWidget {
   const PengirimanScreen({super.key});
@@ -43,30 +44,6 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('History Pengiriman')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: _orders.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (context, index) {
-                final o = _orders[index];
-                final toko = o['nama_toko'] ?? o['customer_name'] ?? 'Toko';
-                final alamat = o['alamat_toko'] ?? '';
-                final tanggal = o['tanggal_order'] ?? '';
-                return ListTile(
-                  title: Text(toko),
-                  subtitle: Text('$alamat\n$tanggal'),
-                  isThreeLine: true,
-                  trailing: IconButton(
-                    icon: const Icon(Icons.map),
-                    onPressed: alamat.isNotEmpty ? () => _openMap(alamat) : null,
-                  ),
-                );
-              },
-            ),
-    );
+    return PengirimanPage(orders: _orders, loading: _loading, onOpenMap: _openMap);
   }
 }

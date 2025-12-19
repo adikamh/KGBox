@@ -1,7 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
+import '../pages/supplier_page.dart';
+import '../providers/auth_provider.dart';
+import '../models/supplier_model.dart';
 
 class SupplierScreen extends StatefulWidget {
   const SupplierScreen({super.key});
@@ -25,8 +29,21 @@ class _SupplierScreenState extends State<SupplierScreen> {
     setState(() => _loading = true);
     try {
       final res = await _api.selectAll(token, project, 'supplier', appid);
-      final jsonRes = json.decode(res);
-      setState(() => _suppliers = List<Map<String, dynamic>>.from(jsonRes['data'] ?? []));
+      final decoded = res is String ? json.decode(res) : res;
+      final rawList = (decoded is Map) ? (decoded['data'] ?? []) : (decoded is List ? decoded : []);
+      final items = List<Map<String, dynamic>>.from(rawList);
+
+      // Normalize backend field names to UI-friendly keys
+      final mapped = items.map((item) {
+        return {
+          'company': item['nama_perusahaan'] ?? item['company'] ?? '',
+          'name': item['nama_agen'] ?? item['name'] ?? '',
+          'phone': item['no_telepon_agen'] ?? item['phone'] ?? '',
+          'alamat': item['alamat_perusahaan'] ?? item['alamat'] ?? '',
+          '_raw': item,
+        };
+      }).toList();
+      setState(() => _suppliers = mapped);
     } catch (e) {
       debugPrint('Error loading suppliers: $e');
     } finally {
@@ -67,14 +84,25 @@ class _SupplierScreenState extends State<SupplierScreen> {
 
     if (result == null) return;
     try {
-      final map = {
-        'ownerid': '',
-        'company': result['company'] ?? '',
-        'name': result['name'] ?? '',
-        'phone': result['phone'] ?? '',
-        'alamat': result['alamat'] ?? '',
-      };
-      await _api.insertOne(token, project, 'supplier', appid, map);
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser;
+      final ownerId = user?.ownerId ?? user?.id ?? '';
+
+      // generate supplier_id if needed
+      final supplierId = 'SUP' + DateTime.now().millisecondsSinceEpoch.toString();
+
+      final supplier = SuppliersModel(
+        id: '',
+        ownerid: ownerId,
+        supplier_id: supplierId,
+        nama_perusahaan: result['company'] ?? '',
+        nama_agen: result['name'] ?? '',
+        no_telepon_agen: result['phone'] ?? '',
+        alamat_perusahaan: result['alamat'] ?? '',
+      );
+
+      await _api.insertOne(token, project, 'supplier', appid, supplier.toJson());
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Supplier berhasil ditambahkan')));
       await _loadSuppliers();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal tambah supplier: $e')));
@@ -83,27 +111,6 @@ class _SupplierScreenState extends State<SupplierScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Supplier')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addSupplier,
-        child: const Icon(Icons.add),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: _suppliers.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (context, index) {
-                final s = _suppliers[index];
-                return ListTile(
-                  title: Text(s['company'] ?? 'Perusahaan'),
-                  subtitle: Text('${s['name'] ?? ''} • ${s['phone'] ?? ''}\n${s['alamat'] ?? ''}'),
-                  isThreeLine: true,
-                );
-              },
-            ),
-    );
+    return SupplierPage(suppliers: _suppliers, loading: _loading, onAdd: _addSupplier);
   }
 }

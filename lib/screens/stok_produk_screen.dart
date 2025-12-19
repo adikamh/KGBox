@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
+import '../pages/stok_produk_page.dart';
 
 class StokProdukScreen extends StatefulWidget {
   const StokProdukScreen({super.key});
@@ -69,27 +70,6 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Stok Produk')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: _products.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (context, index) {
-                final p = _products[index];
-                final nama = p['nama_product'] ?? p['nama'] ?? 'Tanpa Nama';
-                final merek = p['merek_product'] ?? p['merek'] ?? '';
-                final stok = p['jumlah_produk'] ?? p['stok'] ?? '0';
-                final id = p['id_product'] ?? p['id'] ?? p['_id'] ?? '';
-                return ListTile(
-                  title: Text(nama),
-                  subtitle: Text('$merek • Stok: $stok'),
-                  trailing: TextButton(onPressed: () => _requestStock(id.toString()), child: const Text('Minta Stok')),
-                );
-              },
-            ),
-    );
+    return StokProdukPage(products: _products, loading: _loading, onRequestStock: _requestStock);
   }
 }

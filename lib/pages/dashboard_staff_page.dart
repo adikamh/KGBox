@@ -19,6 +19,16 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
   int _selectedBottomIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // fetch today's outgoing data and other metrics so the dashboard cards are synced with backend
+    Future.wait([
+      _controller.fetchTodaysOut(),
+      _controller.fetchMetrics(),
+    ]).then((_) => setState(() {}));
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
@@ -114,8 +124,15 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                     _buildProdukKeluarCard(),
                     const SizedBox(height: 12),
                     Expanded(
-                      child: SingleChildScrollView(
-                        child: _buildStatistikProduk(context, isDarkMode),
+                      child: RefreshIndicator(
+                        onRefresh: () async {
+                          await _controller.refreshAll();
+                          if (mounted) setState(() {});
+                        },
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: _buildStatistikProduk(context, isDarkMode),
+                        ),
                       ),
                     ),
                   ],
@@ -298,42 +315,42 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
       children: [
         _buildStatCard(
           icon: Icons.warning_amber_rounded,
-          value: '12',
+          value: _controller.lowStockCount.toString(),
           label: 'Sisa\nproduk',
           color: const Color(0xFFEF5350),
-          onPressed: () => _controller.showStockAlert(context),
+          onPressed: () => Navigator.pushNamed(context, '/stok_produk'),
         ),
         _buildStatCard(
           icon: Icons.trending_up_rounded,
-          value: '3',
+          value: _controller.bestSellerCount.toString(),
           label: 'Terlaris',
           color: const Color(0xFF66BB6A),
-          onPressed: () => _controller.showBestSellersAlert(context),
+          onPressed: () => Navigator.pushNamed(context, '/bestseller'),
         ),
         _buildStatCard(
           icon: Icons.event_rounded,
-          value: '1',
+          value: _controller.expiredCount.toString(),
           label: 'Kadaluarsa',
           color: const Color(0xFFFFCA28),
-          onPressed: () => _controller.showExpiredAlert(context),
+          onPressed: () => Navigator.pushNamed(context, '/expired'),
         ),
         _buildStatCard(
           icon: Icons.bar_chart_rounded,
-          value: '0',
+          value: _controller.supplierCount.toString(),
           label: 'Suplier',
           color: const Color(0xFF42A5F5),
-          onPressed: () => _controller.showSupplierAlert(context),
+          onPressed: () => Navigator.pushNamed(context, '/supplier'),
         ),
         _buildStatCard(
           icon: Icons.local_shipping_rounded,
-          value: '3',
+          value: _controller.pengirimanCount.toString(),
           label: 'Pengiriman',
           color: const Color(0xFFFF7043),
-          onPressed: () => _controller.navigateToStoreHistory(context),
+          onPressed: () => Navigator.pushNamed(context, '/pengiriman'),
         ),
         _buildStatCard(
           icon: Icons.note_add_rounded,
-          value: '',
+          value: _controller.getTotalQuantity().toString(),
           label: 'Produk\nKeluar',
           color: const Color.fromARGB(255, 111, 111, 111),
           onPressed: () => _controller.navigateToProductOut(context),
