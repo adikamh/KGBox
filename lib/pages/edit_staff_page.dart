@@ -207,7 +207,7 @@ class _EditStaffPageState extends State<EditStaffPage> {
                                   _isActive = value;
                                 });
                               },
-                              activeColor: Colors.green,
+                              activeThumbColor: Colors.green,
                             ),
                           ],
                         ),

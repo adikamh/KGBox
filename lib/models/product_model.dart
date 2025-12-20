@@ -29,8 +29,9 @@ class ProductModel {
     dynamic rawId = data['id'] ?? data['_id'] ?? '';
     String parsedId = '';
     if (rawId is Map) {
-      if (rawId.containsKey('\$oid')) parsedId = rawId['\$oid'].toString();
-      else if (rawId.containsKey(r'$oid')) parsedId = rawId[r'$oid'].toString();
+      if (rawId.containsKey('\$oid')) {
+        parsedId = rawId['\$oid'].toString();
+      } else if (rawId.containsKey(r'$oid')) parsedId = rawId[r'$oid'].toString();
       else parsedId = rawId.toString();
     } else {
       parsedId = rawId?.toString() ?? '';

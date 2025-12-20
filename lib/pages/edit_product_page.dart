@@ -308,7 +308,7 @@ class _EditProductPageState extends State<EditProductPage> {
         const SizedBox(height: 8),
         
         DropdownButtonFormField<String>(
-          value: _controllers['kategori_product']!.text,
+          initialValue: _controllers['kategori_product']!.text,
           decoration: InputDecoration(
             prefixIcon: Icon(Icons.category_rounded, color: Colors.grey[600]),
             filled: true,

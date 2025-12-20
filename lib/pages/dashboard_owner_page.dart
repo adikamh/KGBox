@@ -38,36 +38,45 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
       appBar: _buildAppBar(),
       backgroundColor: Colors.white,
       body: _buildBody(),
+      floatingActionButton: _buildExportButton(),
     );
   }
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: const Color.fromARGB(255, 41, 101, 192),
+      backgroundColor: Colors.transparent,
       elevation: 0.6,
-      leading: const Padding(
-        padding: EdgeInsets.only(left: 12.0),
-        child: Center(child: Icon(Icons.person_outline)),
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF1E40AF),
+              Color(0xFF059669),
+            ],
+          ),
+        ),
       ),
       title: Text(
         widget.userEmail,
-        style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
       ),
       centerTitle: false,
       actions: [
         IconButton(
-          icon: const Icon(Icons.notifications_outlined),
+          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
           onPressed: () => _controller.showNotifications(context),
         ),
         PopupMenuButton<int>(
-          icon: const Icon(Icons.exit_to_app),
+          icon: const Icon(Icons.exit_to_app, color: Colors.white),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           itemBuilder: (context) => [
             PopupMenuItem<int>(
               value: 0,
               child: Row(
                 children: [
-                  const Icon(Icons.badge, size: 20, color: Colors.green),
+                  const Icon(Icons.badge, size: 20, color: Color(0xFF1E40AF)),
                   const SizedBox(width: 8),
                   Text('Role: ${widget.userRole}'),
                 ],
@@ -77,7 +86,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
               value: 1,
               child: const Row(
                 children: [
-                  Icon(Icons.settings, size: 20, color: Colors.grey),
+                  Icon(Icons.settings, size: 20, color: Color(0xFF059669)),
                   SizedBox(width: 8),
                   Text('Settings'),
                 ],
@@ -168,8 +177,8 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF2965C0),
-            Color(0xFF3EA343),
+            Color(0xFF1E40AF),
+            Color(0xFF059669),
           ],
         ),
         borderRadius: BorderRadius.circular(18),
@@ -375,7 +384,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
         _buildMenuCard(
           title: 'Kelola Staff',
           icon: Icons.person_rounded,
-          color: const Color(0xFF42A5F5),
+          color: const Color(0xFF06B6D4),
           onTap: () {
             final auth = Provider.of<AuthProvider>(context, listen: false);
             final user = auth.currentUser;
@@ -402,7 +411,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
         _buildMenuCard(
           title: 'Lihat Produk',
           icon: Icons.inventory_2_rounded,
-          color: const Color(0xFF66BB6A),
+          color: const Color(0xFF059669),
           onTap: () => _controller.navigateToProductsScreen(context),
         ),
       ],
@@ -458,11 +467,11 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFFFF7043),
+          color: const Color(0xFFEA580C),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFFF7043).withOpacity(0.3),
+              color: const Color(0xFFEA580C).withOpacity(0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -1051,5 +1060,38 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
         ),
       ],
     );
+  }
+
+  Widget _buildExportButton() {
+    return FloatingActionButton.extended(
+      backgroundColor: const Color(0xFF059669),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      onPressed: _handleExport,
+      icon: const Icon(
+        Icons.download_rounded,
+        color: Colors.white,
+        size: 24,
+      ),
+      label: const Text(
+        'Export',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  void _handleExport() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Data sedang diekspor...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    // TODO: Implement actual export functionality
   }
 }

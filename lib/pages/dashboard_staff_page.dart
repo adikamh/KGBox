@@ -16,7 +16,7 @@ class DashboardStaffPage extends StatefulWidget {
 
 class _DashboardStaffPageState extends State<DashboardStaffPage> {
   final DashboardStaffScreen _controller = DashboardStaffScreen();
-  int _selectedBottomIndex = 0;
+  final int _selectedBottomIndex = 0;
 
   @override
   Widget build(BuildContext context) {
