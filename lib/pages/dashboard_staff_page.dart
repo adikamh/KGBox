@@ -1,4 +1,5 @@
-// lib/pages/dashboard_staff_page.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../screens/dashboard_staff_screen.dart';
 
@@ -14,9 +15,81 @@ class DashboardStaffPage extends StatefulWidget {
   State<DashboardStaffPage> createState() => _DashboardStaffPageState();
 }
 
-class _DashboardStaffPageState extends State<DashboardStaffPage> {
+class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBindingObserver {
   final DashboardStaffScreen _controller = DashboardStaffScreen();
-  final int _selectedBottomIndex = 0;
+  int _selectedBottomIndex = 0;
+  Timer? _refreshTimer;
+  bool _isRefreshing = false;
+  late DateTime _lastAppResumeTime;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _initializeData();
+    _startAutoRefreshTimer();
+    _lastAppResumeTime = DateTime.now();
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    if (state == AppLifecycleState.resumed) {
+      // App kembali aktif, refresh data jika sudah lebih dari 1 menit
+      final now = DateTime.now();
+      if (now.difference(_lastAppResumeTime) > const Duration(minutes: 1)) {
+        _refreshData();
+      }
+      _lastAppResumeTime = now;
+    }
+  }
+
+  void _startAutoRefreshTimer() {
+    // Refresh setiap 5 menit
+    _refreshTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      if (mounted) {
+        _refreshData();
+      }
+    });
+  }
+
+  Future<void> _initializeData() async {
+    // Run refresh after first frame so context is available for ownerId lookups
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      setState(() => _isRefreshing = true);
+      try {
+        await _controller.refreshAll(context);
+      } catch (e) {
+        debugPrint('Error initializing data: $e');
+      } finally {
+        if (mounted) setState(() => _isRefreshing = false);
+      }
+    });
+  }
+
+  Future<void> _refreshData() async {
+    if (_isRefreshing) return;
+    
+    setState(() => _isRefreshing = true);
+    try {
+      await _controller.smartRefresh(context);
+    } catch (e) {
+      debugPrint('Error refreshing data: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +131,26 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
         ),
       ),
       actions: [
+        if (_isRefreshing)
+          const Padding(
+            padding: EdgeInsets.only(right: 12),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            ),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _refreshData(),
+            tooltip: 'Refresh',
+          ),
         IconButton(
           icon: const Icon(Icons.notifications_outlined),
           onPressed: () => _controller.navigateToNotifications(context),
@@ -114,8 +207,14 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                     _buildProdukKeluarCard(),
                     const SizedBox(height: 12),
                     Expanded(
-                      child: SingleChildScrollView(
-                        child: _buildStatistikProduk(context, isDarkMode),
+                      child: RefreshIndicator(
+                        onRefresh: () async {
+                          await _refreshData();
+                        },
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: _buildStatistikProduk(context, isDarkMode),
+                        ),
                       ),
                     ),
                   ],
@@ -153,6 +252,16 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
               fontWeight: FontWeight.w900,
             ),
           ),
+          if (_isRefreshing) ...[
+            const SizedBox(width: 8),
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -186,13 +295,33 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Produk Keluar',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    children: [
+                      const Text(
+                        'Produk Keluar',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => _refreshData(),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.refresh,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   const Text(
@@ -204,18 +333,28 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text(
-                    '$totalQty',
-                    style: const TextStyle(
-                      fontSize: 56,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (child, animation) {
+                      return ScaleTransition(
+                        scale: animation,
+                        child: child,
+                      );
+                    },
+                    child: Text(
+                      '$totalQty',
+                      key: ValueKey<int>(totalQty),
+                      style: const TextStyle(
+                        fontSize: 56,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Unit',
-                    style: TextStyle(
+                  Text(
+                    '${_controller.pengirimanCount} Transaksi',
+                    style: const TextStyle(
                       fontSize: 15,
                       color: Colors.white70,
                       fontWeight: FontWeight.w500,
@@ -270,12 +409,19 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              Text(
+              const Text(
                 'Statistik Produk',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Updated: ${TimeOfDay.now().format(context)}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey,
                 ),
               ),
             ],
@@ -298,45 +444,51 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
       children: [
         _buildStatCard(
           icon: Icons.warning_amber_rounded,
-          value: '12',
+          value: _controller.lowStockCount.toString(),
           label: 'Sisa\nproduk',
           color: const Color(0xFFEF5350),
-          onPressed: () => _controller.showStockAlert(context),
+          onPressed: () => Navigator.pushNamed(context, '/stok_produk'),
         ),
         _buildStatCard(
           icon: Icons.trending_up_rounded,
-          value: '3',
+          value: _controller.bestSellerCount.toString(),
           label: 'Terlaris',
           color: const Color(0xFF66BB6A),
-          onPressed: () => _controller.showBestSellersAlert(context),
+          onPressed: () => Navigator.pushNamed(context, '/bestseller'),
         ),
         _buildStatCard(
           icon: Icons.event_rounded,
-          value: '1',
+          value: _controller.expiredCount.toString(),
           label: 'Kadaluarsa',
           color: const Color(0xFFFFCA28),
-          onPressed: () => _controller.showExpiredAlert(context),
+          onPressed: () => Navigator.pushNamed(context, '/expired'),
         ),
         _buildStatCard(
           icon: Icons.bar_chart_rounded,
-          value: '0',
+          value: _controller.supplierCount.toString(),
           label: 'Suplier',
           color: const Color(0xFF42A5F5),
-          onPressed: () => _controller.showSupplierAlert(context),
+          onPressed: () => Navigator.pushNamed(context, '/supplier'),
         ),
         _buildStatCard(
           icon: Icons.local_shipping_rounded,
-          value: '3',
+          value: _controller.pengirimanCount.toString(),
           label: 'Pengiriman',
           color: const Color(0xFFFF7043),
-          onPressed: () => _controller.navigateToStoreHistory(context),
+          onPressed: () => Navigator.pushNamed(context, '/pengiriman'),
         ),
         _buildStatCard(
           icon: Icons.note_add_rounded,
-          value: '',
+          value: _controller.getTotalQuantity().toString(),
           label: 'Produk\nKeluar',
           color: const Color.fromARGB(255, 111, 111, 111),
-          onPressed: () => _controller.navigateToProductOut(context),
+          onPressed: () {
+            _controller.navigateToProductOut(context);
+            // Refresh data setelah kembali dari catat barang keluar
+            Future.delayed(const Duration(seconds: 2), () {
+              if (mounted) _refreshData();
+            });
+          },
         ),
       ],
     );
@@ -396,12 +548,16 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
               if (value.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: color,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: Text(
+                      value,
+                      key: ValueKey<String>(value),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
                     ),
                   ),
                 ),
@@ -449,10 +605,15 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> {
                 icon: Icons.add_circle_outline,
                 label: 'Tambah Produk',
                 index: 0,
-                onTap: () => _controller.navigateToAddProduct(
-                  context,
-                  widget.userRole,
-                ),
+                onTap: () async {
+                  _controller.navigateToAddProduct(
+                    context,
+                    widget.userRole,
+                  );
+                  // Refresh data setelah kembali dari add product
+                  await Future.delayed(const Duration(seconds: 2));
+                  if (mounted) _refreshData();
+                },
               ),
               _buildCenterScanButton(),
               _buildBottomNavItem(

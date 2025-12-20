@@ -38,15 +38,8 @@ dependencies:
   google_sign_in: ^6.0.0
   device_preview: ^1.1.1
   mobile_scanner: ^7.1.4
-  firebase_auth: ^5.7.0
-  firebase_core: ^3.15.2
-  cloud_firestore: ^5.6.12
-  # Excel import
-  file_picker: ^6.1.1
-  excel: ^4.0.2
-  # Sharing & platform paths for saving/downloading import results
-  share_plus: ^12.0.0
-  path_provider: ^2.0.15
+  intl: ^0.20.2
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

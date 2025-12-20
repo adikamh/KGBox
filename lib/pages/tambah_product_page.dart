@@ -32,6 +32,9 @@ class _AddProductPageState extends State<AddProductPage> {
   final TextEditingController _tanggalExpiredController = TextEditingController();
   
   bool _isLoading = false;
+  bool _jumlahFromScan = false;
+  Map<String, int>? _scannedCountsMap;
+  final List<String> _barcodeList = [];
   String _selectedCategory = 'Makanan';
 
   @override
@@ -50,6 +53,22 @@ class _AddProductPageState extends State<AddProductPage> {
     );
     
     _selectedCategory = _controller.selectedCategory;
+    // Ensure code field shows initial generated code
+    _codeController.text = _controller.productCode;
+    // If initial barcode provided, add to barcode list (avoid duplicates)
+    if (widget.barcode != null && widget.barcode!.isNotEmpty) {
+      if (!_barcodeList.contains(widget.barcode!)) {
+        _barcodeList.add(widget.barcode!);
+      }
+      _codeController.text = _barcodeList.join(',');
+      _jumlahController.text = _barcodeList.length.toString();
+      _jumlahFromScan = _barcodeList.isNotEmpty;
+      // rebuild scanned counts map from barcode list
+      _scannedCountsMap = {};
+      for (final b in _barcodeList) {
+        _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
+      }
+    }
   }
 
   @override
@@ -122,7 +141,6 @@ class _AddProductPageState extends State<AddProductPage> {
                 }
                 return null;
               },
-              onChanged: (value) => _controller.updateProductCode(),
             ),
             
             // Kode Produk
@@ -160,20 +178,53 @@ class _AddProductPageState extends State<AddProductPage> {
               },
             ),
             
-            // Jumlah Stok
-            _buildTextField(
-              label: 'Jumlah Stok *',
-              controller: _jumlahController,
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Jumlah stok wajib diisi';
-                }
-                if (int.tryParse(value) == null) {
-                  return 'Jumlah harus berupa angka';
-                }
-                return null;
-              },
+            // Jumlah Stok (tampilkan tooltip jika berasal dari hasil scan)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Jumlah Stok *',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (_jumlahFromScan)
+                      Tooltip(
+                        message: 'Jumlah berasal dari hasil scan (otomatis)',
+                        child: Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _jumlahController,
+                  readOnly: _jumlahFromScan,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Jumlah stok wajib diisi';
+                    }
+                    if (int.tryParse(value) == null) {
+                      return 'Jumlah harus berupa angka';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
             ),
             
             // Tanggal Expired
@@ -208,6 +259,7 @@ class _AddProductPageState extends State<AddProductPage> {
     String? prefixText,
     String? Function(String?)? validator,
     void Function(String)? onChanged,
+    bool readOnly = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,6 +274,7 @@ class _AddProductPageState extends State<AddProductPage> {
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
+          readOnly: readOnly,
           keyboardType: keyboardType,
           decoration: InputDecoration(
             contentPadding: const EdgeInsets.symmetric(
@@ -282,10 +335,192 @@ class _AddProductPageState extends State<AddProductPage> {
                 tooltip: 'Scan Barcode',
               ),
             ),
+            const SizedBox(width: 6),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.list, color: Colors.black54),
+                onPressed: _showBarcodePreview,
+                tooltip: 'Preview / Edit Kode Produk',
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
       ],
+    );
+  }
+
+  Future<void> _showBarcodePreview() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx2, sbSetState) {
+          // compute counts from _barcodeList
+          final Map<String, int> counts = {};
+          for (final b in _barcodeList) {
+            counts[b] = (counts[b] ?? 0) + 1;
+          }
+
+          void applyChanges() {
+            // update controllers and maps in parent state
+            setState(() {
+              _codeController.text = _barcodeList.join(',');
+              _jumlahController.text = _barcodeList.length.toString();
+              _jumlahFromScan = _barcodeList.isNotEmpty;
+              // rebuild scannedCountsMap
+              _scannedCountsMap = {};
+              for (final b in _barcodeList) {
+                _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
+              }
+            });
+            sbSetState(() {});
+          }
+
+          if (_barcodeList.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Tidak ada barcode.'),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Tutup'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Preview Kode Produk', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text('${_barcodeList.length} items')
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.all(12),
+                      children: counts.entries.map((e) {
+                        final code = e.key;
+                        final cnt = e.value;
+                        return Card(
+                          child: ListTile(
+                            title: Text(code),
+                            subtitle: Text('Jumlah: $cnt'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.orange),
+                                  tooltip: 'Hapus 1',
+                                  onPressed: () {
+                                    // remove one occurrence
+                                    final idx = _barcodeList.indexOf(code);
+                                    if (idx >= 0) {
+                                      setState(() => _barcodeList.removeAt(idx));
+                                      sbSetState(() {});
+                                      applyChanges();
+                                    }
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  tooltip: 'Hapus semua',
+                                  onPressed: () {
+                                    setState(() => _barcodeList.removeWhere((x) => x == code));
+                                    sbSetState(() {});
+                                    applyChanges();
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  tooltip: 'Edit',
+                                  onPressed: () async {
+                                    final TextEditingController editCtrl = TextEditingController(text: code);
+                                    final res = await showDialog<String?>(
+                                      context: ctx,
+                                      builder: (dctx) => AlertDialog(
+                                        title: const Text('Edit Kode'),
+                                        content: TextField(controller: editCtrl, decoration: const InputDecoration(labelText: 'Kode baru')),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(dctx), child: const Text('Batal')),
+                                          TextButton(onPressed: () => Navigator.pop(dctx, editCtrl.text.trim()), child: const Text('Simpan')),
+                                        ],
+                                      ),
+                                    );
+                                    if (res != null && res.isNotEmpty && res != code) {
+                                      // prevent creating duplicates via edit
+                                      if (_barcodeList.contains(res)) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Tidak dapat mengganti dengan $res karena sudah ada di daftar.'), backgroundColor: Colors.orange),
+                                        );
+                                      } else {
+                                        // replace all occurrences of code with res
+                                        for (int i = 0; i < _barcodeList.length; i++) {
+                                          if (_barcodeList[i] == code) _barcodeList[i] = res;
+                                        }
+                                        sbSetState(() {});
+                                        applyChanges();
+                                      }
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                            },
+                            child: const Text('Tutup')),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              // finalize and close
+                              applyChanges();
+                              Navigator.pop(ctx);
+                            },
+                            child: const Text('Simpan Perubahan')),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
     );
   }
 
@@ -318,8 +553,8 @@ class _AddProductPageState extends State<AddProductPage> {
             if (value != null) {
               setState(() {
                 _selectedCategory = value;
+                // Update controller's selectedCategory but do NOT change product code
                 _controller.selectedCategory = value;
-                _controller.updateProductCode();
               });
             }
           },
@@ -408,10 +643,78 @@ class _AddProductPageState extends State<AddProductPage> {
   }
 
   Future<void> _scanBarcode() async {
-    final scannedCode = await _controller.scanBarcode(context);
-    if (scannedCode != null && mounted) {
+    final scanResult = await _controller.scanBarcode(context);
+    if (scanResult != null && mounted) {
       setState(() {
-        _codeController.text = scannedCode;
+        // If scanner returned a single barcode string -> append to barcode list
+        if (scanResult is String) {
+          final scannedCode = scanResult;
+          if (_barcodeList.contains(scannedCode)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Barcode $scannedCode sudah ada. Duplikat tidak diperbolehkan.'), backgroundColor: Colors.orange),
+            );
+            return;
+          }
+          _barcodeList.add(scannedCode);
+
+          _codeController.text = _barcodeList.join(',');
+          _controller.productId = _barcodeList.first;
+          _controller.productCode = _barcodeList.first;
+          if (_controller.codeController != null) {
+            _controller.codeController!.text = _barcodeList.first;
+          }
+
+          _jumlahController.text = _barcodeList.length.toString();
+          _jumlahFromScan = true;
+
+          // update scanned counts map
+          _scannedCountsMap = {};
+          for (final b in _barcodeList) {
+            _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
+          }
+        }
+
+        // If scanner returned multiple scanned counts -> expand and append (skip duplicates)
+        else if (scanResult is Map) {
+          final Map map = scanResult;
+          if (map.isEmpty) return;
+          final List<String> duplicates = [];
+          // expand each barcode by its count and append but skip duplicates
+          map.forEach((key, value) {
+            final b = key.toString();
+            final count = int.tryParse(value.toString()) ?? 0;
+            for (int i = 0; i < count; i++) {
+              if (_barcodeList.contains(b)) {
+                if (!duplicates.contains(b)) duplicates.add(b);
+              } else {
+                _barcodeList.add(b);
+              }
+            }
+          });
+          if (duplicates.isNotEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Barcode duplikat diabaikan: ${duplicates.join(', ')}'), backgroundColor: Colors.orange),
+            );
+          }
+
+          if (_barcodeList.isNotEmpty) {
+            _codeController.text = _barcodeList.join(',');
+            _controller.productId = _barcodeList.first;
+            _controller.productCode = _barcodeList.first;
+            if (_controller.codeController != null) {
+              _controller.codeController!.text = _barcodeList.first;
+            }
+
+            _jumlahController.text = _barcodeList.length.toString();
+            _jumlahFromScan = true;
+
+            // store full map for later batch insert (aggregate from barcodeList)
+            _scannedCountsMap = {};
+            for (final b in _barcodeList) {
+              _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
+            }
+          }
+        }
       });
     }
   }
@@ -421,11 +724,32 @@ class _AddProductPageState extends State<AddProductPage> {
       return;
     }
 
+    // Ensure there are no duplicate barcodes before submitting
+    if (_barcodeList.isNotEmpty) {
+      final Map<String, int> check = {};
+      for (final b in _barcodeList) {
+        check[b] = (check[b] ?? 0) + 1;
+      }
+      final dupes = check.entries.where((e) => e.value > 1).map((e) => e.key).toList();
+      if (dupes.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Terdapat barcode duplikat: ${dupes.join(', ')}. Hapus atau edit sebelum menyimpan.'), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+    }
+
     setState(() {
       _isLoading = true;
     });
 
-    final result = await _controller.addProduct();
+    Map<String, dynamic> result;
+    if (_barcodeList.isNotEmpty) {
+      // send one product per barcode occurrence
+      result = await _controller.addProductsFromScans(_barcodeList);
+    } else {
+      result = await _controller.addProduct();
+    }
 
     setState(() {
       _isLoading = false;
@@ -433,16 +757,28 @@ class _AddProductPageState extends State<AddProductPage> {
 
     if (result['success'] == true) {
       // Show success message
+      String msg = result['message'] ?? 'Operasi berhasil';
+      // If batch (aggregated) we may have 'total'
+      if (result['total'] != null) {
+        msg = '$msg — Total jumlah: ${result['total']}';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message']),
+          content: Text(msg),
           backgroundColor: Colors.green,
         ),
       );
 
       // Callback jika ada
-      if (widget.onProductAdded != null && result['product'] != null) {
-        widget.onProductAdded!(result['product']);
+      if (_scannedCountsMap != null && _scannedCountsMap!.isNotEmpty) {
+        if (widget.onProductAdded != null && result['product'] != null) {
+          widget.onProductAdded!(result['product']);
+        }
+      } else {
+        if (widget.onProductAdded != null && result['product'] != null) {
+          widget.onProductAdded!(result['product']);
+        }
       }
 
       // Navigate back

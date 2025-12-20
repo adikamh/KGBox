@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../screens/barcode_scanner_screen.dart';
+// ignore: unused_import
 import 'tambah_product_page.dart';
 
 class BarcodeScannerPage extends StatefulWidget {
@@ -25,6 +26,7 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage>
   
   String? _lastDetectedBarcode;
   bool _showSuccessFeedback = false;
+  final Map<String, int> _scannedCounts = {};
 
   @override
   void initState() {
@@ -77,6 +79,27 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage>
           icon: const Icon(Icons.flash_on, color: Colors.white),
           onPressed: _controller.toggleTorch,
         ),
+        IconButton(
+          icon: const Icon(Icons.check, color: Colors.white),
+          tooltip: 'Selesai (kirim hasil)',
+          onPressed: () {
+            if (_scannedCounts.isEmpty) {
+              Navigator.pop(context, null);
+            } else {
+              Navigator.pop(context, _scannedCounts);
+            }
+          },
+        ),
+        IconButton(
+          icon: const Icon(Icons.clear, color: Colors.white),
+          tooltip: 'Reset hasil scan',
+          onPressed: () {
+            setState(() {
+              _scannedCounts.clear();
+              _lastDetectedBarcode = null;
+            });
+          },
+        ),
       ],
     );
   }
@@ -111,7 +134,6 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage>
           context,
           capture,
           onBarcodeDetected: _onBarcodeDetected,
-          onNavigateToAddProduct: _navigateToAddProduct,
         );
       },
     );
@@ -193,6 +215,23 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage>
                 ),
               ),
             ),
+          const SizedBox(height: 8),
+          if (_scannedCounts.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: _scannedCounts.entries.map((e) {
+                  return Text(
+                    '${_controller.formatBarcode(e.key)} : ${e.value}',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  );
+                }).toList(),
+              ),
+            ),
         ],
       ),
     );
@@ -246,6 +285,7 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage>
     setState(() {
       _lastDetectedBarcode = barcode;
       _showSuccessFeedback = true;
+      _scannedCounts[barcode] = (_scannedCounts[barcode] ?? 0) + 1;
     });
     
     // Hide success feedback after 1 second
@@ -258,21 +298,15 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage>
     });
   }
 
+  // ignore: unused_element
   void _navigateToAddProduct(String barcode) {
+    // kept for compatibility but not used in multi-scan mode
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Barcode: $barcode\nNavigating to Add Product...'),
         duration: const Duration(seconds: 2),
       ),
     );
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AddProductPage(
-          barcode: barcode,
-          userRole: widget.userRole,
-        ),
-      ),
-    );
+    Navigator.pop(context, barcode);
   }
 }

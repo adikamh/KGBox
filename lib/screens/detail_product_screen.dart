@@ -18,6 +18,22 @@ class DetailProductScreen {
   
   // Get formatted product values
   Map<String, dynamic> getFormattedProduct() {
+    // If product contains 'items' (grouped), derive aggregated values
+    if (product.containsKey('items') && product['items'] is List) {
+      final items = (product['items'] as List).cast<Map<String, dynamic>>();
+      final totalStock = items.fold<int>(0, (s, it) => s + _safeInt(it['jumlah_produk']));
+      return {
+        'code': product['id_product'] ?? '-',
+        'name': product['nama_product'] ?? items.first['nama_product'] ?? '-',
+        'category': product['kategori_product'] ?? items.first['kategori_product'] ?? '-',
+        'brand': product['merek_product'] ?? items.first['merek_product'] ?? '-',
+        'purchaseDate': product['tanggal_beli'] ?? items.first['tanggal_beli'] ?? '-',
+        'price': product['harga_product'] ?? items.first['harga_product'] ?? '-',
+        'stock': totalStock.toString(),
+        'expiredDate': product['tanggal_expired'] ?? items.first['tanggal_expired'] ?? '-',
+      };
+    }
+
     return {
       'code': product['id_product'] ?? '-',
       'name': product['nama_product'] ?? '-',
@@ -28,6 +44,22 @@ class DetailProductScreen {
       'stock': product['jumlah_produk'] ?? '-',
       'expiredDate': product['tanggal_expired'] ?? '-',
     };
+  }
+
+  // Safe int parser helper
+  int _safeInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.round();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  List<Map<String, dynamic>> getItemUnits() {
+    if (product.containsKey('items') && product['items'] is List) {
+      return (product['items'] as List).cast<Map<String, dynamic>>();
+    }
+    return [product.cast<String, dynamic>()];
   }
   
   // Format price
@@ -206,16 +238,7 @@ class DetailProductScreen {
   
   // Create ProductModel from product data
   ProductModel createProductModel() {
-    return ProductModel(
-      id: product['id'] ?? '',
-      id_product: product['id_product'] ?? '',
-      nama_product: product['nama_product'] ?? '',
-      kategori_product: product['kategori_product'] ?? '',
-      merek_product: product['merek_product'] ?? '',
-      tanggal_beli: product['tanggal_beli'] ?? '',
-      harga_product: product['harga_product'] ?? '',
-      jumlah_produk: product['jumlah_produk']?.toString() ?? '0',
-      tanggal_expired: product['tanggal_expired'] ?? '',
-    );
+    // ignore: unnecessary_cast
+    return ProductModel.fromJson(product as Map<String, dynamic>);
   }
 }

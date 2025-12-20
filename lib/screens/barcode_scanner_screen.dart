@@ -7,6 +7,8 @@ class BarcodeScannerScreen {
   
   bool _isProcessing = false;
   String? _lastScannedCode;
+  DateTime? _lastScannedAt;
+  final int _debounceMs = 700;
   
   // Getters
   MobileScannerController get controller => _controller;
@@ -22,32 +24,30 @@ class BarcodeScannerScreen {
     BuildContext context,
     BarcodeCapture capture, {
     required Function(String) onBarcodeDetected,
-    required Function(String) onNavigateToAddProduct,
   }) async {
-    if (_isProcessing) return;
-
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
     final raw = barcodes.first.rawValue;
     if (raw == null || raw.isEmpty) return;
 
-    // Hindari scan berulang
-    if (_lastScannedCode == raw) return;
+    final now = DateTime.now();
+
+    // Debounce to avoid many frames producing duplicate counts.
+    if (_lastScannedCode == raw && _lastScannedAt != null) {
+      final diff = now.difference(_lastScannedAt!).inMilliseconds;
+      if (diff < _debounceMs) return;
+    }
 
     _lastScannedCode = raw;
+    _lastScannedAt = now;
     _isProcessing = true;
 
-    // Callback untuk barcode yang terdeteksi
+    // Callback untuk barcode yang terdeteksi (do NOT navigate here)
     onBarcodeDetected(raw);
 
-    // Navigasi setelah delay kecil
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    if (context.mounted) {
-      onNavigateToAddProduct(raw);
-    }
-    
+    // Small pause to avoid flooding and allow UI updates
+    await Future.delayed(const Duration(milliseconds: 300));
     _isProcessing = false;
   }
   
