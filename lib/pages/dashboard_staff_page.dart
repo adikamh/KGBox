@@ -180,7 +180,13 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
               ),
             ),
             PopupMenuItem(
-              child: const Text('Logout'),
+              child: const Row(
+                children: [
+                  Icon(Icons.logout, size: 20, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Logout'),
+                ],
+              ),
               onTap: () => _controller.logout(context),
             ),
           ],
@@ -277,7 +283,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.15),
@@ -287,7 +293,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(28.0),
+        padding: const EdgeInsets.all(16.0),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -300,39 +306,39 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
                       const Text(
                         'Produk Keluar',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 14,
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       GestureDetector(
                         onTap: () => _refreshData(),
                         child: Container(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Icon(
                             Icons.refresh,
-                            size: 16,
+                            size: 14,
                             color: Colors.white,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   const Text(
                     'Hari Ini',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 11,
                       color: Colors.white70,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 8),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     transitionBuilder: (child, animation) {
@@ -345,17 +351,17 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
                       '$totalQty',
                       key: ValueKey<int>(totalQty),
                       style: const TextStyle(
-                        fontSize: 56,
+                        fontSize: 40,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     '${_controller.pengirimanCount} Transaksi',
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: 12,
                       color: Colors.white70,
                       fontWeight: FontWeight.w500,
                     ),
@@ -364,14 +370,14 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
               ),
             ),
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(
                 Icons.inventory_2_rounded,
-                size: 64,
+                size: 44,
                 color: Colors.white,
               ),
             ),
@@ -620,6 +626,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
                 icon: Icons.visibility_outlined,
                 label: 'Lihat Produk',
                 index: 1,
+                isBlue: true,
                 onTap: () => _controller.navigateToViewProducts(context),
               ),
             ],
@@ -661,8 +668,12 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
     required String label,
     required int index,
     required VoidCallback onTap,
+    bool isBlue = false,
   }) {
     final isSelected = _selectedBottomIndex == index;
+    final color = isBlue ? const Color.fromARGB(255, 41, 101, 192) : 
+                  (isSelected ? const Color.fromARGB(255, 41, 101, 192) : Colors.grey);
+    
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -676,9 +687,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
           children: [
             Icon(
               icon,
-              color: isSelected
-                  ? const Color.fromARGB(255, 41, 101, 192)
-                  : Colors.grey,
+              color: color,
               size: 26,
             ),
             const SizedBox(height: 4),
@@ -686,10 +695,8 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
               label,
               style: TextStyle(
                 fontSize: 11,
-                color: isSelected
-                    ? const Color.fromARGB(255, 41, 101, 192)
-                    : Colors.grey,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                color: color,
+                fontWeight: isBlue || isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ],

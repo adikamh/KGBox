@@ -149,184 +149,16 @@ class _StokProdukPageState extends State<StokProdukPage> {
     final lowStockCount = widget.getLowStockCount();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Stok Produk'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sort),
-            onPressed: () => _showSortOptions(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.filter_alt),
-            onPressed: () => _showFilterOptions(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: widget.onRefresh,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
-              ),
-              child: TextField(
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search, color: Colors.blue),
-                  hintText: 'Cari produk...',
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                  suffixIcon: _query.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.grey),
-                          onPressed: () => setState(() => _query = ''),
-                        )
-                      : null,
-                ),
-                onChanged: (v) => setState(() => _query = v),
-              ),
-            ),
-          ),
-
-          // Quick Stats
-          if (!widget.loading && _sortedProducts.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildStatChip(
-                      'Semua',
-                      _totalProducts.toString(),
-                      Colors.blue,
-                      _selectedCategory == 'Semua',
-                      () => setState(() => _selectedCategory = 'Semua'),
-                    ),
-                    if (_lowStockProducts > 0)
-                      _buildStatChip(
-                        'Stok Rendah',
-                        _lowStockProducts.toString(),
-                        Colors.orange,
-                        false,
-                        () {
-                          setState(() {
-                            _selectedCategory = 'Semua';
-                            _query = '';
-                            _sortBy = 'stok';
-                            _sortDescending = false;
-                          });
-                        },
-                      ),
-                    if (_outOfStockProducts > 0)
-                      _buildStatChip(
-                        'Habis',
-                        _outOfStockProducts.toString(),
-                        Colors.red,
-                        false,
-                        () {
-                          setState(() {
-                            _selectedCategory = 'Semua';
-                            _query = '';
-                            _sortBy = 'stok';
-                            _sortDescending = false;
-                          });
-                        },
-                      ),
-                    _buildStatChip(
-                      'Total Stok',
-                      _totalStock.toString(),
-                      Colors.green,
-                      false,
-                      null,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // Category Filter Chips
-          if (_categories.length > 1 && !widget.loading)
-            Container(
-              height: 50,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _categories.length,
-                itemBuilder: (context, index) {
-                  final category = _categories[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: FilterChip(
-                      label: Text(category),
-                      selected: _selectedCategory == category,
-                      onSelected: (selected) {
-                        setState(() => _selectedCategory = selected ? category : 'Semua');
-                      },
-                      backgroundColor: Colors.grey.shade100,
-                      selectedColor: Colors.blue.shade100,
-                      checkmarkColor: Colors.blue,
-                    ),
-                  );
-                },
-              ),
-            ),
-
-          // List Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      backgroundColor: Colors.grey[50],
+      body: widget.loading
+          ? _buildLoadingState()
+          : Column(
               children: [
-                Text(
-                  'Produk ($_totalProducts)',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blueGrey,
-                  ),
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.inventory, size: 16, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$_totalStock unit',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ],
-                ),
+                _buildHeader(),
+                if (_sortedProducts.isNotEmpty) _buildListHeader(),
+                Expanded(child: _buildProductList()),
               ],
             ),
-          ),
-
-          // Main Product List
-          Expanded(
-            child: widget.loading
-                ? _buildLoadingState()
-                : _sortedProducts.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: _sortedProducts.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final product = _sortedProducts[index];
-                          return _buildProductCard(product);
-                        },
-                      ),
-          ),
-        ],
-      ),
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
@@ -402,6 +234,198 @@ class _StokProdukPageState extends State<StokProdukPage> {
         ),
       ),
     );
+  }
+
+  // ================= HEADER =================
+
+  Widget _buildHeader() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.blue[500]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
+          child: Column(
+            children: [
+              // AppBar
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded,
+                        color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Stok Produk',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon:
+                        const Icon(Icons.sort_rounded, color: Colors.white),
+                    onPressed: () => _showSortOptions(context),
+                  ),
+                  IconButton(
+                    icon:
+                        const Icon(Icons.filter_alt, color: Colors.white),
+                    onPressed: () => _showFilterOptions(context),
+                  ),
+                  IconButton(
+                    icon:
+                        const Icon(Icons.refresh, color: Colors.white),
+                    onPressed: widget.onRefresh,
+                  ),
+                ],
+              ),
+
+              // Search
+              Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded,
+                        color: Colors.blue[700]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Cari produk...',
+                          border: InputBorder.none,
+                        ),
+                        onChanged: (v) =>
+                            setState(() => _query = v),
+                      ),
+                    ),
+                    if (_query.isNotEmpty)
+                      GestureDetector(
+                        onTap: () => setState(() => _query = ''),
+                        child: const Icon(Icons.close_rounded,
+                            size: 18, color: Colors.grey),
+                      ),
+                  ],
+                ),
+              ),
+
+              if (_sortedProducts.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _buildInlineStats(),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ================= INLINE STATS =================
+
+  Widget _buildInlineStats() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _inlineStatItem(
+            _totalProducts.toString(), 'Semua'),
+        _verticalDivider(),
+        _inlineStatItem(
+            _lowStockProducts.toString(), 'Stok Rendah'),
+        _verticalDivider(),
+        _inlineStatItem(
+            _totalStock.toString(), 'Total Stok'),
+      ],
+    );
+  }
+
+  Widget _inlineStatItem(String value, String label) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold),
+        ),
+        Text(label,
+            style:
+                const TextStyle(color: Colors.white70, fontSize: 12)),
+      ],
+    );
+  }
+
+  Widget _verticalDivider() => Container(
+        width: 1,
+        height: 42,
+        color: Colors.white24,
+      );
+
+  // ================= LIST HEADER =================
+
+  Widget _buildListHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Produk ($_totalProducts)',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.blueGrey,
+            ),
+          ),
+          Row(
+            children: [
+              const Icon(Icons.inventory, size: 16, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(
+                '$_totalStock unit',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ================= PRODUCT LIST =================
+
+  Widget _buildProductList() {
+    return _sortedProducts.isEmpty
+        ? _buildEmptyState()
+        : ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: _sortedProducts.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final product = _sortedProducts[index];
+              return _buildProductCard(product);
+            },
+          );
   }
 
   Widget _buildProductCard(Map<String, dynamic> product) {

@@ -13,24 +13,13 @@ class ExpiredPage extends StatefulWidget {
 
 class _ExpiredPageState extends State<ExpiredPage> {
   String _query = '';
-  String _sortBy = 'tanggal'; // 'tanggal', 'nama', 'waktu'
+  String _sortBy = 'tanggal';
   bool _showCriticalOnly = false;
-  
-  // ignore: unused_field
-  final Map<int, String> _timeCategories = {
-    0: 'Hari Ini',
-    1: 'Besok',
-    2: '3 Hari Lagi',
-    3: 'Minggu Ini',
-    4: 'Minggu Depan',
-    5: 'Lebih dari Seminggu'
-  };
 
   @override
   Widget build(BuildContext context) {
     DateTime now = DateTime.now();
     
-    // Kategorikan items berdasarkan waktu kedaluwarsa
     List<Map<String, dynamic>> categorizedItems = widget.items.map((item) {
       final p = item['full'] as Map<String, dynamic>? ?? {};
       final nama = p['nama_product'] ?? p['nama'] ?? 'Tanpa Nama';
@@ -48,31 +37,31 @@ class _ExpiredPageState extends State<ExpiredPage> {
         
         if (daysUntilExpiry < 0) {
           category = 'Sudah Lewat';
-          statusColor = Colors.red;
+          statusColor = Colors.red[700]!;
           statusText = 'LEWAT';
         } else if (daysUntilExpiry == 0) {
           category = 'Hari Ini';
-          statusColor = Colors.red.shade800;
+          statusColor = Colors.red[800]!;
           statusText = 'KRITIS';
         } else if (daysUntilExpiry == 1) {
           category = 'Besok';
-          statusColor = Colors.orange;
+          statusColor = Colors.orange[600]!;
           statusText = 'WASPADA';
         } else if (daysUntilExpiry <= 3) {
           category = '3 Hari Lagi';
-          statusColor = Colors.orange.shade300;
+          statusColor = Colors.orange[400]!;
           statusText = 'PERHATIAN';
         } else if (daysUntilExpiry <= 7) {
           category = 'Minggu Ini';
-          statusColor = Colors.yellow.shade700;
+          statusColor = Colors.amber[700]!;
           statusText = 'SEGERA';
         } else if (daysUntilExpiry <= 14) {
           category = 'Minggu Depan';
-          statusColor = Colors.blue;
+          statusColor = Colors.blue[600]!;
           statusText = 'AWAS';
         } else {
           category = 'Lebih dari Seminggu';
-          statusColor = Colors.green;
+          statusColor = Colors.green[600]!;
           statusText = 'AMAN';
         }
       } catch (e) {
@@ -93,18 +82,14 @@ class _ExpiredPageState extends State<ExpiredPage> {
       };
     }).toList();
 
-    // Filter berdasarkan pencarian
     List<Map<String, dynamic>> filteredItems = categorizedItems.where((item) {
       final searchTerm = _query.toLowerCase();
       final nama = item['nama'].toString().toLowerCase();
       final category = item['category'].toString().toLowerCase();
       
-      return _query.isEmpty || 
-             nama.contains(searchTerm) || 
-             category.contains(searchTerm);
+      return _query.isEmpty || nama.contains(searchTerm) || category.contains(searchTerm);
     }).toList();
 
-    // Filter critical items only jika toggle aktif
     if (_showCriticalOnly) {
       filteredItems = filteredItems.where((item) {
         final days = item['days_until'] as int;
@@ -112,14 +97,12 @@ class _ExpiredPageState extends State<ExpiredPage> {
       }).toList();
     }
 
-    // Sorting
     filteredItems.sort((a, b) {
       if (_sortBy == 'nama') {
         return a['nama'].compareTo(b['nama']);
       } else if (_sortBy == 'waktu') {
         return (a['days_until'] as int).compareTo(b['days_until'] as int);
       } else {
-        // default sort by tanggal
         final aDate = a['exp_date'];
         final bDate = b['exp_date'];
         if (aDate == null) return 1;
@@ -128,7 +111,6 @@ class _ExpiredPageState extends State<ExpiredPage> {
       }
     });
 
-    // Kelompokkan berdasarkan kategori
     Map<String, List<Map<String, dynamic>>> groupedItems = {};
     for (var item in filteredItems) {
       final category = item['category'];
@@ -138,7 +120,6 @@ class _ExpiredPageState extends State<ExpiredPage> {
       groupedItems[category]!.add(item);
     }
 
-    // Hitung statistik
     int criticalCount = categorizedItems.where((item) {
       final days = item['days_until'] as int;
       return days <= 3 || days < 0;
@@ -160,256 +141,124 @@ class _ExpiredPageState extends State<ExpiredPage> {
     }).length;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Produk Kedaluwarsa'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                builder: (context) {
-                  return StatefulBuilder(
-                    builder: (context, setStateSB) {
-                      return Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'Filter & Urutkan',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 20),
-                            const Text('Urutkan berdasarkan:', style: TextStyle(fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                FilterChip(
-                                  label: const Text('Tanggal'),
-                                  selected: _sortBy == 'tanggal',
-                                  onSelected: (selected) {
-                                    setStateSB(() => _sortBy = 'tanggal');
-                                    setState(() => _sortBy = 'tanggal');
-                                  },
-                                ),
-                                FilterChip(
-                                  label: const Text('Nama'),
-                                  selected: _sortBy == 'nama',
-                                  onSelected: (selected) {
-                                    setStateSB(() => _sortBy = 'nama');
-                                    setState(() => _sortBy = 'nama');
-                                  },
-                                ),
-                                FilterChip(
-                                  label: const Text('Waktu'),
-                                  selected: _sortBy == 'waktu',
-                                  onSelected: (selected) {
-                                    setStateSB(() => _sortBy = 'waktu');
-                                    setState(() => _sortBy = 'waktu');
-                                  },
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            SwitchListTile(
-                              title: const Text('Tampilkan yang kritis saja'),
-                              subtitle: const Text('≤ 7 hari atau sudah lewat'),
-                              value: _showCriticalOnly,
-                              onChanged: (value) {
-                                setStateSB(() => _showCriticalOnly = value);
-                                setState(() => _showCriticalOnly = value);
-                              },
-                            ),
-                            const SizedBox(height: 20),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Terapkan'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
-              ),
-              child: TextField(
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search, color: Colors.red),
-                  hintText: 'Cari produk kadaluarsa...',
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                  suffixIcon: _query.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.grey),
-                          onPressed: () => setState(() => _query = ''),
-                        )
-                      : null,
-                ),
-                onChanged: (v) => setState(() => _query = v),
-              ),
-            ),
-          ),
-
-          // Statistik Cards
-          if (!widget.loading && categorizedItems.isNotEmpty)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  _buildStatCard(
-                    context,
-                    'Total',
-                    categorizedItems.length.toString(),
-                    Icons.inventory,
-                    Colors.blue,
-                  ),
-                  _buildStatCard(
-                    context,
-                    'Kritis',
-                    '$criticalCount',
-                    Icons.warning,
-                    Colors.red,
-                    criticalCount > 0,
-                  ),
-                  _buildStatCard(
-                    context,
-                    'Peringatan',
-                    '$warningCount',
-                    Icons.warning_amber,
-                    Colors.orange,
-                    warningCount > 0,
-                  ),
-                  _buildStatCard(
-                    context,
-                    'Aman',
-                    '$safeCount',
-                    Icons.check_circle,
-                    Colors.green,
-                  ),
-                  _buildStatCard(
-                    context,
-                    'Lewat',
-                    '$expiredCount',
-                    Icons.error,
-                    Colors.red.shade800,
-                    expiredCount > 0,
-                  ),
-                ],
-              ),
-            ),
-
-          // Timeline Legend
-          if (!widget.loading && filteredItems.isNotEmpty)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildTimelineDot('Sudah Lewat', Colors.red),
-                  _buildTimelineDot('Hari Ini', Colors.red.shade800),
-                  _buildTimelineDot('≤3 Hari', Colors.orange),
-                  _buildTimelineDot('≤1 Minggu', Colors.yellow.shade700),
-                  _buildTimelineDot('Aman', Colors.green),
-                ],
-              ),
-            ),
-
-          // List Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      backgroundColor: Colors.grey[50],
+      body: widget.loading
+          ? _buildLoadingState()
+          : Column(
               children: [
-                Text(
-                  _showCriticalOnly ? 'Produk Kritis ($criticalCount)' : 'Semua Produk',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blueGrey,
+                _buildHeader(context),
+                if (categorizedItems.isNotEmpty) ...[
+                  _buildStatsCards(
+                    categorizedItems.length,
+                    criticalCount,
+                    warningCount,
+                    safeCount,
+                    expiredCount,
                   ),
-                ),
-                Text(
-                  '${filteredItems.length} ditemukan',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                  ),
+                ],
+                _buildListHeader(filteredItems.length, criticalCount),
+                Expanded(
+                  child: filteredItems.isEmpty
+                      ? _buildEmptyState()
+                      : _buildProductList(groupedItems),
                 ),
               ],
             ),
-          ),
-
-          // Main Content
-          Expanded(
-            child: widget.loading
-                ? _buildLoadingState()
-                : filteredItems.isEmpty
-                    ? _buildEmptyState()
-                    : _buildProductList(groupedItems),
-          ),
-        ],
-      ),
       floatingActionButton: criticalCount > 0
           ? FloatingActionButton.extended(
-              onPressed: () {
-                // Aksi untuk menangani produk kritis
-                _handleCriticalProducts(criticalCount);
-              },
-              icon: const Icon(Icons.warning),
+              onPressed: () => _handleCriticalProducts(criticalCount),
+              icon: const Icon(Icons.warning_rounded),
               label: Text('$criticalCount KRITIS'),
-              backgroundColor: Colors.red,
+              backgroundColor: Colors.red[700],
               foregroundColor: Colors.white,
             )
           : null,
     );
   }
 
-  Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, Color color, [bool highlight = false]) {
+  Widget _buildHeader(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(right: 8),
-      child: Card(
-        color: highlight ? color.withOpacity(0.1) : null,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.red[700]!, Colors.red[500]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
+        ),
+      ),
+      child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(12.0),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Produk Kedaluwarsa',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.filter_list_rounded, color: Colors.white),
+                    onPressed: () => _showFilterOptions(context),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
+              const SizedBox(height: 8),
+              Container(
+                height: 50,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(25),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded, color: Colors.red[700]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Cari produk...',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(color: Colors.grey[400]),
+                        ),
+                        onChanged: (v) => setState(() => _query = v),
+                      ),
+                    ),
+                    if (_query.isNotEmpty)
+                      GestureDetector(
+                        onTap: () => setState(() => _query = ''),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.close_rounded, size: 16, color: Colors.grey),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -419,86 +268,114 @@ class _ExpiredPageState extends State<ExpiredPage> {
     );
   }
 
-  Widget _buildTimelineDot(String label, Color color) {
-    return Column(
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLoadingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildStatsCards(int total, int critical, int warning, int safe, int expired) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Memeriksa tanggal kedaluwarsa...'),
+          _buildSmallStatCard('Total', '$total', Icons.inventory_2_rounded, Colors.blue[600]!),
+          _buildSmallStatCard('Kritis', '$critical', Icons.warning_rounded, Colors.red[600]!),
+          _buildSmallStatCard('Peringatan', '$warning', Icons.warning_amber_rounded, Colors.orange[600]!),
+          _buildSmallStatCard('Aman', '$safe', Icons.check_circle_rounded, Colors.green[600]!),
+          _buildSmallStatCard('Lewat', '$expired', Icons.error_rounded, Colors.red[800]!),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
+  Widget _buildSmallStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      width: 65,
+      height: 65,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.calendar_today,
-            size: 80,
-            color: Colors.green.shade300,
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              icon,
+              size: 14,
+              color: color,
+            ),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Tidak ada produk kedaluwarsa',
+          const SizedBox(height: 4),
+          Text(
+            value,
             style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
-          if (_showCriticalOnly)
-            const Padding(
-              padding: EdgeInsets.only(top: 8.0),
-              child: Text(
-                'Semua produk dalam kondisi aman',
-                style: TextStyle(color: Colors.green),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 9,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListHeader(int count, int critical) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            _showCriticalOnly ? 'Produk Kritis' : 'Semua Produk',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.red[50],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$count produk',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.red[700],
+                fontWeight: FontWeight.w600,
               ),
             ),
-          if (_query.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Text(
-                'Pencarian: "$_query" tidak ditemukan',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: () {
-              setState(() {
-                _query = '';
-                _showCriticalOnly = false;
-              });
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Reset Filter'),
           ),
         ],
       ),
@@ -508,47 +385,60 @@ class _ExpiredPageState extends State<ExpiredPage> {
   Widget _buildProductList(Map<String, List<Map<String, dynamic>>> groupedItems) {
     List<String> sortedCategories = groupedItems.keys.toList();
     sortedCategories.sort((a, b) {
-      // Urutkan berdasarkan prioritas: sudah lewat -> hari ini -> besok -> dll
-      List<String> priorityOrder = ['Sudah Lewat', 'Hari Ini', 'Besok', '3 Hari Lagi', 'Minggu Ini', 'Minggu Depan', 'Lebih dari Seminggu', 'Tanggal Tidak Valid'];
+      List<String> priorityOrder = [
+        'Sudah Lewat',
+        'Hari Ini',
+        'Besok',
+        '3 Hari Lagi',
+        'Minggu Ini',
+        'Minggu Depan',
+        'Lebih dari Seminggu',
+        'Tanggal Tidak Valid'
+      ];
       int aIndex = priorityOrder.indexOf(a);
       int bIndex = priorityOrder.indexOf(b);
       return aIndex.compareTo(bIndex);
     });
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 80),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
       itemCount: sortedCategories.length,
       itemBuilder: (context, categoryIndex) {
-        final category = sortedCategories[categoryIndex]; // PERBAIKAN: sortedCategories bukan sortedCategory
+        final category = sortedCategories[categoryIndex];
         final itemsInCategory = groupedItems[category]!;
+        final categoryColor = _getCategoryColor(category);
         
-        Color categoryColor = _getCategoryColor(category);
-        
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          elevation: 3,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: categoryColor.withOpacity(0.2), width: 1),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Category Header
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: categoryColor.withOpacity(0.1),
+                  gradient: LinearGradient(
+                    colors: [categoryColor.withOpacity(0.1), categoryColor.withOpacity(0.05)],
+                  ),
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(12),
-                    topRight: Radius.circular(12),
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
                   ),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: 8,
-                      height: 8,
+                      width: 10,
+                      height: 10,
                       decoration: BoxDecoration(
                         color: categoryColor,
                         shape: BoxShape.circle,
@@ -561,24 +451,32 @@ class _ExpiredPageState extends State<ExpiredPage> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: categoryColor,
-                          fontSize: 16,
+                          fontSize: 15,
                         ),
                       ),
                     ),
-                    Chip(
-                      label: Text('${itemsInCategory.length} item'),
-                      backgroundColor: categoryColor.withOpacity(0.2),
-                      labelStyle: TextStyle(color: categoryColor),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: categoryColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${itemsInCategory.length}',
+                        style: TextStyle(
+                          color: categoryColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-              
-              // Items List
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
                 itemCount: itemsInCategory.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, itemIndex) {
@@ -600,93 +498,224 @@ class _ExpiredPageState extends State<ExpiredPage> {
     final statusColor = item['status_color'] as Color;
     final statusText = item['status_text'] as String;
     
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: statusColor.withOpacity(0.1),
-          border: Border.all(color: statusColor),
-        ),
-        child: Center(
-          child: daysUntil < 0
-              ? const Icon(Icons.error, color: Colors.red, size: 20)
-              : daysUntil == 0
-                ? const Icon(Icons.warning, color: Colors.red, size: 20)
-                : daysUntil <= 3
-                  ? const Icon(Icons.warning_amber, color: Colors.orange, size: 20)
-                  : const Icon(Icons.calendar_today, color: Colors.blue, size: 20),
-        ),
-      ),
-      title: Text(
-        nama,
-        style: const TextStyle(fontWeight: FontWeight.w500),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Text('Kadaluarsa: $formattedDate'),
-          const SizedBox(height: 4),
-          Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showProductDetail(item),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+          child: Row(
             children: [
-              if (daysUntil < 0)
-                Text(
-                  '${daysUntil.abs()} hari yang lalu',
-                  style: const TextStyle(color: Colors.red),
-                )
-              else
-                Text(
-                  '$daysUntil hari lagi',
-                  style: TextStyle(
-                    color: daysUntil <= 7 ? Colors.orange : Colors.green,
-                  ),
-                ),
-              const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: statusColor),
-                ),
-                child: Text(
-                  statusText,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+                  gradient: LinearGradient(
+                    colors: [statusColor.withOpacity(0.8), statusColor],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: statusColor.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  daysUntil < 0
+                      ? Icons.error_rounded
+                      : daysUntil == 0
+                          ? Icons.warning_rounded
+                          : daysUntil <= 3
+                              ? Icons.warning_amber_rounded
+                              : Icons.calendar_today_rounded,
+                  color: Colors.white,
+                  size: 24,
                 ),
               ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nama,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.event_rounded, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          formattedDate,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            daysUntil < 0
+                                ? '${daysUntil.abs()} hari yang lalu'
+                                : '$daysUntil hari lagi',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: statusColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: statusColor.withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            statusText,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: Colors.grey[400]),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: Colors.red[700]),
+          const SizedBox(height: 16),
+          Text(
+            'Memeriksa tanggal kedaluwarsa...',
+            style: TextStyle(color: Colors.grey[600]),
           ),
         ],
       ),
-      trailing: IconButton(
-        icon: Icon(Icons.more_vert, color: Colors.grey.shade600),
-        onPressed: () => _showProductActions(item),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.check_circle_outline,
+                size: 64,
+                color: Colors.green[300],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Semua Produk Aman',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _query.isNotEmpty
+                  ? 'Pencarian "$_query" tidak ditemukan'
+                  : _showCriticalOnly
+                      ? 'Tidak ada produk dalam kondisi kritis'
+                      : 'Belum ada produk yang akan kedaluwarsa',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 24),
+            if (_query.isNotEmpty || _showCriticalOnly)
+              SizedBox(
+                width: 160,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _query = '';
+                      _showCriticalOnly = false;
+                    });
+                  },
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text(
+                    'Reset Filter',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[700],
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-      onTap: () => _showProductDetail(item),
     );
   }
 
   Color _getCategoryColor(String category) {
     switch (category) {
       case 'Sudah Lewat':
-        return Colors.red;
+        return Colors.red[700]!;
       case 'Hari Ini':
-        return Colors.red.shade800;
+        return Colors.red[800]!;
       case 'Besok':
+        return Colors.orange[600]!;
       case '3 Hari Lagi':
-        return Colors.orange;
+        return Colors.orange[400]!;
       case 'Minggu Ini':
-        return Colors.yellow.shade700;
+        return Colors.amber[700]!;
       case 'Minggu Depan':
-        return Colors.blue;
+        return Colors.blue[600]!;
       case 'Lebih dari Seminggu':
-        return Colors.green;
+        return Colors.green[600]!;
       default:
         return Colors.grey;
     }
@@ -695,10 +724,139 @@ class _ExpiredPageState extends State<ExpiredPage> {
   String _formatDate(String dateString) {
     try {
       final date = DateTime.parse(dateString);
-      return DateFormat('dd MMMM yyyy', 'id_ID').format(date);
+      return DateFormat('dd MMM yyyy').format(date);
     } catch (e) {
       return dateString;
     }
+  }
+
+  void _showFilterOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateSB) {
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red[50],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.filter_list_rounded, color: Colors.red[700]),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Filter & Urutkan',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Urutkan berdasarkan:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      FilterChip(
+                        label: const Text('Tanggal'),
+                        selected: _sortBy == 'tanggal',
+                        selectedColor: Colors.red[100],
+                        checkmarkColor: Colors.red[700],
+                        onSelected: (selected) {
+                          setStateSB(() => _sortBy = 'tanggal');
+                          setState(() => _sortBy = 'tanggal');
+                        },
+                      ),
+                      FilterChip(
+                        label: const Text('Nama'),
+                        selected: _sortBy == 'nama',
+                        selectedColor: Colors.red[100],
+                        checkmarkColor: Colors.red[700],
+                        onSelected: (selected) {
+                          setStateSB(() => _sortBy = 'nama');
+                          setState(() => _sortBy = 'nama');
+                        },
+                      ),
+                      FilterChip(
+                        label: const Text('Waktu'),
+                        selected: _sortBy == 'waktu',
+                        selectedColor: Colors.red[100],
+                        checkmarkColor: Colors.red[700],
+                        onSelected: (selected) {
+                          setStateSB(() => _sortBy = 'waktu');
+                          setState(() => _sortBy = 'waktu');
+                        },
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 32),
+                  SwitchListTile(
+                    title: const Text('Tampilkan yang kritis saja'),
+                    subtitle: const Text('≤ 7 hari atau sudah lewat'),
+                    value: _showCriticalOnly,
+                    activeColor: Colors.red[700],
+                    onChanged: (value) {
+                      setStateSB(() => _showCriticalOnly = value);
+                      setState(() => _showCriticalOnly = value);
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[700],
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Terapkan',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showProductDetail(Map<String, dynamic> item) {
@@ -706,6 +864,7 @@ class _ExpiredPageState extends State<ExpiredPage> {
     final formattedDate = item['formatted_date'];
     final daysUntil = item['days_until'] as int;
     final statusColor = item['status_color'] as Color;
+    final statusText = item['status_text'] as String;
     
     showModalBottomSheet(
       context: context,
@@ -717,183 +876,191 @@ class _ExpiredPageState extends State<ExpiredPage> {
           padding: const EdgeInsets.all(20.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Container(
-                    width: 50,
-                    height: 50,
+                    width: 60,
+                    height: 60,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: statusColor.withOpacity(0.1),
-                      border: Border.all(color: statusColor, width: 2),
+                      gradient: LinearGradient(
+                        colors: [statusColor.withOpacity(0.8), statusColor],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: statusColor.withOpacity(0.3),
+                          blurRadius: 15,
+                          spreadRadius: 3,
+                        ),
+                      ],
                     ),
-                    child: Center(
-                      child: daysUntil < 0
-                          ? const Icon(Icons.error, color: Colors.red, size: 30)
-                          : const Icon(Icons.inventory, color: Colors.blue, size: 30),
+                    child: Icon(
+                      daysUntil < 0 ? Icons.error_rounded : Icons.inventory_2_rounded,
+                      color: Colors.white,
+                      size: 32,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    child: Text(
-                      nama,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          nama,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            statusText,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Status:'),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              item['status_text'],
-                              style: TextStyle(
-                                color: statusColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Tanggal Kedaluwarsa:'),
-                          Text(
-                            formattedDate,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Sisa Waktu:'),
-                          Text(
-                            daysUntil < 0
-                                ? '${daysUntil.abs()} hari yang lalu'
-                                : '$daysUntil hari lagi',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: daysUntil <= 3 ? Colors.red : Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.grey[50]!, Colors.grey[100]!],
                   ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Tanggal Kedaluwarsa',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        ),
+                        Text(
+                          formattedDate,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Sisa Waktu',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        ),
+                        Text(
+                          daysUntil < 0
+                              ? '${daysUntil.abs()} hari yang lalu'
+                              : '$daysUntil hari lagi',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'Tindakan:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 24),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildActionButton(Icons.delete, 'Buang', Colors.red),
-                  _buildActionButton(Icons.edit, 'Ubah Tanggal', Colors.blue),
-                  _buildActionButton(Icons.notifications, 'Ingatkan', Colors.orange),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {},
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue[700],
+                        side: BorderSide(color: Colors.blue[200]!),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      icon: const Icon(Icons.edit_rounded, size: 18),
+                      label: const Text('Ubah', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {},
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange[700],
+                        side: BorderSide(color: Colors.orange[200]!),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      icon: const Icon(Icons.notifications_rounded, size: 18),
+                      label: const Text('Ingatkan', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: () {},
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red[700],
+                      side: BorderSide(color: Colors.red[200]!),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                    child: const Icon(Icons.delete_rounded, size: 18),
+                  ),
                 ],
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
+                height: 50,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: Colors.red[700],
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   child: const Text(
                     'TUTUP',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                   ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildActionButton(IconData icon, String label, Color color) {
-    return Column(
-      children: [
-        IconButton(
-          icon: Icon(icon),
-          color: color,
-          onPressed: () {},
-        ),
-        Text(
-          label,
-          style: TextStyle(color: color, fontSize: 12),
-        ),
-      ],
-    );
-  }
-
-  void _showProductActions(Map<String, dynamic> item) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.edit, color: Colors.blue),
-                title: const Text('Ubah Tanggal Kadaluwarsa'),
-                onTap: () {},
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Buang Produk'),
-                onTap: () {},
-              ),
-              ListTile(
-                leading: const Icon(Icons.notifications, color: Colors.orange),
-                title: const Text('Atur Pengingat'),
-                onTap: () {},
-              ),
-              ListTile(
-                leading: const Icon(Icons.share, color: Colors.green),
-                title: const Text('Bagikan Info'),
-                onTap: () {},
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Batal'),
               ),
             ],
           ),
@@ -907,14 +1074,18 @@ class _ExpiredPageState extends State<ExpiredPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Row(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
             children: [
-              Icon(Icons.warning, color: Colors.red),
-              SizedBox(width: 10),
-              Text('Produk Kritis!'),
+              Icon(Icons.warning_rounded, color: Colors.red[700], size: 28),
+              const SizedBox(width: 12),
+              const Text('Produk Kritis!'),
             ],
           ),
-          content: Text('Ada $count produk yang akan segera atau sudah kedaluwarsa. Segera lakukan tindakan!'),
+          content: Text(
+            'Ada $count produk yang akan segera atau sudah kedaluwarsa. Segera lakukan tindakan!',
+            style: TextStyle(color: Colors.grey[700]),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -923,9 +1094,12 @@ class _ExpiredPageState extends State<ExpiredPage> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                // Aksi untuk menangani produk kritis
+                setState(() => _showCriticalOnly = true);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700],
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Tinjau Sekarang'),
             ),
           ],

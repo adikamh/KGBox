@@ -94,7 +94,13 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
             ),
             PopupMenuItem<int>(
               value: 2,
-              child: const Text('Logout'),
+              child: const Row(
+                children: [
+                  Icon(Icons.logout, size: 20, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Logout'),
+                ],
+              ),
             ),
           ],
           onSelected: (value) {

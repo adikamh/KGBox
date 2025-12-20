@@ -12,12 +12,12 @@ class DetailProductPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final DetailProductScreen controller = DetailProductScreen();
-    controller.initialize(product);
+    final DetailProductScreen _controller = DetailProductScreen();
+    _controller.initialize(product);
     
-    final formattedProduct = controller.getFormattedProduct();
-    final isExpired = controller.isProductExpired();
-    final isStockLow = controller.isStockLow();
+    final formattedProduct = _controller.getFormattedProduct();
+    final isExpired = _controller.isProductExpired();
+    final isStockLow = _controller.isStockLow();
     
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -27,7 +27,7 @@ class DetailProductPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header with product info
-            _buildHeader(controller, formattedProduct, isExpired, isStockLow),
+            _buildHeader(_controller, formattedProduct, isExpired, isStockLow),
             
             // Body with details
             Padding(
@@ -35,12 +35,12 @@ class DetailProductPage extends StatelessWidget {
               child: Column(
                 children: [
                   // Price and Stock Cards
-                  _buildStatsRow(controller, formattedProduct),
+                  _buildStatsRow(_controller, formattedProduct),
                   
                   const SizedBox(height: 20),
                   
                   // Product Information Card
-                  _buildInfoCard(controller, formattedProduct),
+                  _buildInfoCard(_controller, formattedProduct),
                   
                   const SizedBox(height: 16),
                   // If product has multiple units, show list of unit ids
@@ -68,7 +68,7 @@ class DetailProductPage extends StatelessWidget {
                                 dense: true,
                                 title: Text(id.toString()),
                                 // ignore: dead_code
-                                subtitle: Text(barcodeList ?? ''),
+                                subtitle: Text(barcodeList),
                               );
                             }).toList(),
                           ],
@@ -80,7 +80,7 @@ class DetailProductPage extends StatelessWidget {
                   const SizedBox(height: 24),
                   
                   // Action Buttons
-                  _buildActionButtons(context, controller, formattedProduct),
+                  _buildActionButtons(context, _controller, formattedProduct),
                 ],
               ),
             ),

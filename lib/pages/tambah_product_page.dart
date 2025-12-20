@@ -80,216 +80,252 @@ class _AddProductPageState extends State<AddProductPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: _buildAppBar(),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Menyimpan produk...',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            )
           : _buildBody(),
     );
   }
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      title: const Text('Tambah Produk Baru'),
+      elevation: 0,
+      flexibleSpace: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue[700]!, Colors.blue[500]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+      ),
+      foregroundColor: Colors.white,
+      title: const Text(
+        'Tambah Produk Baru',
+        style: TextStyle(fontWeight: FontWeight.w600),
+      ),
+      centerTitle: true,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
+        icon: const Icon(Icons.arrow_back_rounded),
         onPressed: () => Navigator.pop(context),
       ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.save),
-          onPressed: _submitForm,
-          tooltip: 'Simpan Produk',
-        ),
-      ],
     );
   }
 
   Widget _buildBody() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          children: [
-            _buildProductInfoCard(),
-            const SizedBox(height: 24),
-            _buildActionButtons(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProductInfoCard() {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 18),
-            
-            // Nama Produk
-            _buildTextField(
-              label: 'Nama Produk *',
-              controller: _nameController,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Nama produk wajib diisi';
-                }
-                return null;
-              },
+      child: Column(
+        children: [
+          // Header Section
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue[700]!, Colors.blue[500]!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(30),
+                bottomRight: Radius.circular(30),
+              ),
             ),
-            
-            // Kode Produk
-            _buildCodeField(),
-            
-            // Kategori
-            _buildCategoryField(),
-            
-            // Merek Produk
-            _buildTextField(
-              label: 'Merek Produk *',
-              controller: _merekController,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Merek produk wajib diisi';
-                }
-                return null;
-              },
-            ),
-            
-            // Harga Produk
-            _buildTextField(
-              label: 'Harga Produk *',
-              controller: _hargaController,
-              keyboardType: TextInputType.number,
-              prefixText: 'Rp ',
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Harga produk wajib diisi';
-                }
-                if (int.tryParse(value) == null) {
-                  return 'Harga harus berupa angka';
-                }
-                return null;
-              },
-            ),
-            
-            // Jumlah Stok (tampilkan tooltip jika berasal dari hasil scan)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    const Text(
-                      'Jumlah Stok *',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (_jumlahFromScan)
-                      Tooltip(
-                        message: 'Jumlah berasal dari hasil scan (otomatis)',
-                        child: Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
-                      ),
-                  ],
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.inventory_2_rounded,
+                    size: 32,
+                    color: Colors.white,
+                  ),
                 ),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _jumlahController,
-                  readOnly: _jumlahFromScan,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 12,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Text(
+                    'Lengkapi Informasi Produk',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Jumlah stok wajib diisi';
-                    }
-                    if (int.tryParse(value) == null) {
-                      return 'Jumlah harus berupa angka';
-                    }
-                    return null;
-                  },
                 ),
-                const SizedBox(height: 12),
               ],
             ),
-            
-            // Tanggal Expired
-            _buildDateField(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return const Row(
-      children: [
-        Icon(Icons.add_circle_outline, color: Colors.blue),
-        SizedBox(width: 12),
-        Text(
-          "Informasi Produk",
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.blue,
           ),
-        ),
-      ],
+          
+          // Form Section
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTextField(
+                    label: 'Nama Produk',
+                    hint: 'Contoh: Indomie Goreng',
+                    icon: Icons.shopping_bag_rounded,
+                    controller: _nameController,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Nama produk wajib diisi';
+                      }
+                      return null;
+                    },
+                    onChanged: (value) => _controller.updateProductCode(),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  _buildCodeField(),
+                  
+                  const SizedBox(height: 16),
+                  
+                  _buildCategoryField(),
+                  
+                  const SizedBox(height: 16),
+                  
+                  _buildTextField(
+                    label: 'Merek Produk',
+                    hint: 'Contoh: Indofood',
+                    icon: Icons.verified_rounded,
+                    controller: _merekController,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Merek produk wajib diisi';
+                      }
+                      return null;
+                    },
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  _buildTextField(
+                    label: 'Harga Produk',
+                    hint: '0',
+                    icon: Icons.payments_rounded,
+                    controller: _hargaController,
+                    keyboardType: TextInputType.number,
+                    prefixText: 'Rp ',
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Harga produk wajib diisi';
+                      }
+                      if (int.tryParse(value) == null) {
+                        return 'Harga harus berupa angka';
+                      }
+                      return null;
+                    },
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  _buildJumlahField(),
+                  
+                  const SizedBox(height: 16),
+                  
+                  _buildDateField(),
+                  
+                  const SizedBox(height: 32),
+                  
+                  _buildActionButtons(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildTextField({
     required String label,
+    required String hint,
+    required IconData icon,
     required TextEditingController controller,
     TextInputType? keyboardType,
     String? prefixText,
     String? Function(String?)? validator,
     void Function(String)? onChanged,
-    bool readOnly = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 13,
+          style: TextStyle(
+            fontSize: 14,
             fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
           ),
         ),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          readOnly: readOnly,
-          keyboardType: keyboardType,
-          decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(
-              vertical: 12,
-              horizontal: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            prefixText: prefixText,
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          validator: validator,
-          onChanged: onChanged,
+          child: TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            decoration: InputDecoration(
+              hintText: hint,
+              prefixIcon: Icon(icon, color: Colors.blue[700]),
+              prefixText: prefixText,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[200]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red, width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            validator: validator,
+            onChanged: onChanged,
+          ),
         ),
-        const SizedBox(height: 12),
       ],
     );
   }
@@ -298,58 +334,291 @@ class _AddProductPageState extends State<AddProductPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Kode Produk *',
+        Text(
+          'Kode Produk',
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
           ),
         ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: _codeController,
-                readOnly: true,
-                decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 12,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _codeController,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    hintText: 'Otomatis dibuat',
+                    prefixIcon: Icon(Icons.qr_code_rounded, color: Colors.blue[700]),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
                   ),
                 ),
               ),
+              Container(
+                margin: const EdgeInsets.only(right: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.blue[700]!, Colors.blue[500]!],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white),
+                  onPressed: _scanBarcode,
+                  tooltip: 'Scan Barcode',
+                ),
+              ),
+              Container(
+                margin: const EdgeInsets.only(right: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.list, color: Colors.grey[700]),
+                  onPressed: _showBarcodePreview,
+                  tooltip: 'Preview / Edit Kode Produk',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Kategori',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: DropdownButtonFormField<String>(
+            value: _selectedCategory,
+            decoration: InputDecoration(
+              prefixIcon: Icon(Icons.category_rounded, color: Colors.blue[700]),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[200]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            items: _controller.categories
+                .map((c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(c),
+                    ))
+                .toList(),
+            onChanged: (value) {
+              if (value != null) {
+                setState(() {
+                  _selectedCategory = value;
+                  _controller.selectedCategory = value;
+                  _controller.updateProductCode();
+                });
+              }
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildJumlahField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Jumlah Stok',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
             ),
             const SizedBox(width: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
+            if (_jumlahFromScan)
+              Tooltip(
+                message: 'Jumlah berasal dari hasil scan (otomatis)',
+                child: Icon(Icons.info_outline, color: Colors.blue[700], size: 18),
               ),
-              child: IconButton(
-                icon: const Icon(Icons.qr_code_2, color: Colors.blue),
-                onPressed: _scanBarcode,
-                tooltip: 'Scan Barcode',
-              ),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.list, color: Colors.black54),
-                onPressed: _showBarcodePreview,
-                tooltip: 'Preview / Edit Kode Produk',
-              ),
-            ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: TextFormField(
+            controller: _jumlahController,
+            readOnly: _jumlahFromScan,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              hintText: '1',
+              prefixIcon: Icon(Icons.inventory_rounded, color: Colors.blue[700]),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[200]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red, width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Jumlah stok wajib diisi';
+              }
+              if (int.tryParse(value) == null) {
+                return 'Jumlah harus berupa angka';
+              }
+              return null;
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDateField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tanggal Expired',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: TextFormField(
+            controller: _tanggalExpiredController,
+            readOnly: true,
+            decoration: InputDecoration(
+              hintText: 'YYYY-MM-DD',
+              prefixIcon: IconButton(
+                icon: Icon(Icons.calendar_today_rounded, color: Colors.blue[700]),
+                onPressed: () => _controller.selectExpiredDate(context),
+                tooltip: 'Pilih Tanggal',
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[200]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red, width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Tanggal expired wajib diisi';
+              }
+              return null;
+            },
+          ),
+        ),
       ],
     );
   }
@@ -470,9 +739,18 @@ class _AddProductPageState extends State<AddProductPage> {
                                     if (res != null && res.isNotEmpty && res != code) {
                                       // prevent creating duplicates via edit
                                       if (_barcodeList.contains(res)) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Tidak dapat mengganti dengan $res karena sudah ada di daftar.'), backgroundColor: Colors.orange),
-                                        );
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Tidak dapat mengganti dengan $res karena sudah ada di daftar.'),
+                                              backgroundColor: Colors.orange,
+                                              behavior: SnackBarBehavior.floating,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(10),
+                                              ),
+                                            ),
+                                          );
+                                        }
                                       } else {
                                         // replace all occurrences of code with res
                                         for (int i = 0; i < _barcodeList.length; i++) {
@@ -524,100 +802,27 @@ class _AddProductPageState extends State<AddProductPage> {
     );
   }
 
-  Widget _buildCategoryField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Kategori *',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          initialValue: _selectedCategory,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          items: _controller.categories
-              .map((c) => DropdownMenuItem(
-                    value: c,
-                    child: Text(c),
-                  ))
-              .toList(),
-          onChanged: (value) {
-            if (value != null) {
-              setState(() {
-                _selectedCategory = value;
-                // Update controller's selectedCategory but do NOT change product code
-                _controller.selectedCategory = value;
-              });
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-      ],
-    );
-  }
-
-  Widget _buildDateField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Tanggal Expired *',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: _tanggalExpiredController,
-          readOnly: true,
-          decoration: InputDecoration(
-            hintText: 'YYYY-MM-DD',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.calendar_today, color: Colors.blue),
-              onPressed: () => _controller.selectExpiredDate(context),
-              tooltip: 'Pilih Tanggal',
-            ),
-          ),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Tanggal expired wajib diisi';
-            }
-            return null;
-          },
-        ),
-      ],
-    );
-  }
-
   Widget _buildActionButtons() {
     return Row(
       children: [
         Expanded(
           child: OutlinedButton(
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              side: BorderSide(color: Colors.grey.shade400),
+              side: BorderSide(color: Colors.grey[400]!),
               backgroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(context),
-            child: const Text(
+            child: Text(
               'Batal',
-              style: TextStyle(color: Colors.black87),
+              style: TextStyle(
+                color: Colors.grey[700],
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ),
@@ -625,16 +830,29 @@ class _AddProductPageState extends State<AddProductPage> {
         Expanded(
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              backgroundColor: const Color(0xFF2965C0),
+              backgroundColor: Colors.blue[700],
+              foregroundColor: Colors.white,
+              elevation: 2,
+              shadowColor: Colors.blue.withOpacity(0.5),
             ),
             onPressed: _submitForm,
-            child: const Text(
-              'Simpan Produk',
-              style: TextStyle(color: Colors.white),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.save_rounded, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Simpan Produk',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -645,25 +863,39 @@ class _AddProductPageState extends State<AddProductPage> {
   Future<void> _scanBarcode() async {
     final scanResult = await _controller.scanBarcode(context);
     if (scanResult != null && mounted) {
-      setState(() {
-        // If scanner returned a single barcode string -> append to barcode list
-        if (scanResult is String) {
-          final scannedCode = scanResult;
-          if (_barcodeList.contains(scannedCode)) {
+      // If scanner returned a single barcode string -> append to barcode list
+      if (scanResult is String) {
+        final scannedCode = scanResult;
+        if (_barcodeList.contains(scannedCode)) {
+          if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Barcode $scannedCode sudah ada. Duplikat tidak diperbolehkan.'), backgroundColor: Colors.orange),
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.info, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text('Barcode $scannedCode sudah ada. Duplikat tidak diperbolehkan.')),
+                  ],
+                ),
+                backgroundColor: Colors.orange[600],
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
             );
-            return;
           }
+          return;
+        }
+        
+        setState(() {
           _barcodeList.add(scannedCode);
-
           _codeController.text = _barcodeList.join(',');
           _controller.productId = _barcodeList.first;
           _controller.productCode = _barcodeList.first;
           if (_controller.codeController != null) {
             _controller.codeController!.text = _barcodeList.first;
           }
-
           _jumlahController.text = _barcodeList.length.toString();
           _jumlahFromScan = true;
 
@@ -672,39 +904,56 @@ class _AddProductPageState extends State<AddProductPage> {
           for (final b in _barcodeList) {
             _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
           }
+        });
+      }
+      // If scanner returned multiple scanned counts -> expand and append (skip duplicates)
+      else if (scanResult is Map) {
+        final Map map = scanResult;
+        if (map.isEmpty) return;
+        final List<String> duplicates = [];
+        final List<String> newBarcodes = [];
+        
+        // expand each barcode by its count and append but skip duplicates
+        map.forEach((key, value) {
+          final b = key.toString();
+          final count = int.tryParse(value.toString()) ?? 0;
+          for (int i = 0; i < count; i++) {
+            if (_barcodeList.contains(b)) {
+              if (!duplicates.contains(b)) duplicates.add(b);
+            } else {
+              newBarcodes.add(b);
+            }
+          }
+        });
+        
+        if (duplicates.isNotEmpty && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.info, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Barcode duplikat diabaikan: ${duplicates.join(', ')}')),
+                ],
+              ),
+              backgroundColor: Colors.orange[600],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
         }
 
-        // If scanner returned multiple scanned counts -> expand and append (skip duplicates)
-        else if (scanResult is Map) {
-          final Map map = scanResult;
-          if (map.isEmpty) return;
-          final List<String> duplicates = [];
-          // expand each barcode by its count and append but skip duplicates
-          map.forEach((key, value) {
-            final b = key.toString();
-            final count = int.tryParse(value.toString()) ?? 0;
-            for (int i = 0; i < count; i++) {
-              if (_barcodeList.contains(b)) {
-                if (!duplicates.contains(b)) duplicates.add(b);
-              } else {
-                _barcodeList.add(b);
-              }
-            }
-          });
-          if (duplicates.isNotEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Barcode duplikat diabaikan: ${duplicates.join(', ')}'), backgroundColor: Colors.orange),
-            );
-          }
-
-          if (_barcodeList.isNotEmpty) {
+        if (newBarcodes.isNotEmpty) {
+          setState(() {
+            _barcodeList.addAll(newBarcodes);
             _codeController.text = _barcodeList.join(',');
             _controller.productId = _barcodeList.first;
             _controller.productCode = _barcodeList.first;
             if (_controller.codeController != null) {
               _controller.codeController!.text = _barcodeList.first;
             }
-
             _jumlahController.text = _barcodeList.length.toString();
             _jumlahFromScan = true;
 
@@ -713,9 +962,9 @@ class _AddProductPageState extends State<AddProductPage> {
             for (final b in _barcodeList) {
               _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
             }
-          }
+          });
         }
-      });
+      }
     }
   }
 
@@ -732,9 +981,24 @@ class _AddProductPageState extends State<AddProductPage> {
       }
       final dupes = check.entries.where((e) => e.value > 1).map((e) => e.key).toList();
       if (dupes.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Terdapat barcode duplikat: ${dupes.join(', ')}. Hapus atau edit sebelum menyimpan.'), backgroundColor: Colors.orange),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Terdapat barcode duplikat: ${dupes.join(', ')}. Hapus atau edit sebelum menyimpan.')),
+                ],
+              ),
+              backgroundColor: Colors.orange[600],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
         return;
       }
     }
@@ -745,7 +1009,6 @@ class _AddProductPageState extends State<AddProductPage> {
 
     Map<String, dynamic> result;
     if (_barcodeList.isNotEmpty) {
-      // send one product per barcode occurrence
       result = await _controller.addProductsFromScans(_barcodeList);
     } else {
       result = await _controller.addProduct();
@@ -755,22 +1018,33 @@ class _AddProductPageState extends State<AddProductPage> {
       _isLoading = false;
     });
 
+    if (!mounted) return;
+
     if (result['success'] == true) {
-      // Show success message
       String msg = result['message'] ?? 'Operasi berhasil';
-      // If batch (aggregated) we may have 'total'
       if (result['total'] != null) {
         msg = '$msg — Total jumlah: ${result['total']}';
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text(msg)),
+              ],
+            ),
+            backgroundColor: Colors.green[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
 
-      // Callback jika ada
       if (_scannedCountsMap != null && _scannedCountsMap!.isNotEmpty) {
         if (widget.onProductAdded != null && result['product'] != null) {
           widget.onProductAdded!(result['product']);
@@ -781,25 +1055,37 @@ class _AddProductPageState extends State<AddProductPage> {
         }
       }
 
-      // Navigate back
       if (mounted) {
         Navigator.pop(context, true);
       }
     } else {
-      // Show error message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message'] ?? 'Terjadi kesalahan'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text(result['message'] ?? 'Terjadi kesalahan')),
+              ],
+            ),
+            backgroundColor: Colors.red[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
 
-      // Highlight error fields jika ada
       if (result['errors'] != null) {
         // ignore: unused_local_variable
         final errors = result['errors'] as Map<String, String?>;
-        // Anda bisa menambahkan logika untuk highlight field error
       }
     }
   }
+}
+
+extension on AddProductScreen {
+  void updateProductCode() {}
 }

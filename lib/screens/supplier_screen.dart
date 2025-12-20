@@ -307,7 +307,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
         try {
           // Try per-field update using updateId endpoint with extracted id
           for (final entry in updateData.entries) {
-            final fOk = await _api.updateId(entry.key, entry.value?.toString() ?? '', token, project, 'suppliers', appid, id);
+            final fOk = await _api.updateId(entry.key, entry.value.toString(), token, project, 'suppliers', appid, id);
             debugPrint('updateId by extracted id for ${entry.key}: $fOk');
             if (fOk) {
               anyOk = true;
@@ -316,11 +316,11 @@ class _SupplierScreenState extends State<SupplierScreen> {
 
           // If none succeeded, try using supplier_id field from raw document
           if (!anyOk) {
-            // ignore: dead_code, unnecessary_type_check
+            // ignore: dead_code
             final supplierIdField = raw is Map ? (raw['supplier_id'] ?? raw['supplierId'] ?? '') : '';
             if (supplierIdField != null && supplierIdField.toString().isNotEmpty && supplierIdField.toString() != id) {
               for (final entry in updateData.entries) {
-                final fOk = await _api.updateId(entry.key, entry.value?.toString() ?? '', token, project, 'suppliers', appid, supplierIdField.toString());
+                final fOk = await _api.updateId(entry.key, entry.value.toString(), token, project, 'suppliers', appid, supplierIdField.toString());
                 debugPrint('updateId by supplier_id for ${entry.key}: $fOk');
                 if (fOk) {
                   anyOk = true;
@@ -335,7 +335,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
               final supplierIdField2 = raw is Map ? (raw['supplier_id'] ?? raw['supplierId'] ?? '') : '';
               if (supplierIdField2 != null && supplierIdField2.toString().isNotEmpty) {
                 for (final entry in updateData.entries) {
-                  final uwOk = await _api.updateWhere('supplier_id', supplierIdField2.toString(), entry.key, entry.value?.toString() ?? '', token, project, 'suppliers', appid);
+                  final uwOk = await _api.updateWhere('supplier_id', supplierIdField2.toString(), entry.key, entry.value.toString(), token, project, 'suppliers', appid);
                   debugPrint('updateWhere by supplier_id for ${entry.key}: $uwOk');
                   if (uwOk) anyOk = true;
                 }

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 // ignore: unused_import
 import '../pages/dashboard_owner_page.dart';
+import '../pages/list_product_page.dart';
+import '../pages/pengiriman_page.dart';
+import 'logout_screen.dart';
 
 class DashboardOwnerController {
   // Data management
@@ -99,19 +102,34 @@ class DashboardOwnerController {
   }
 
   void navigateToProductsScreen(BuildContext context) {
-    // Import your ListProductPage here
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(builder: (_) => ListProductPage()),
-    // );
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ListProductPage()),
+    );
   }
 
   void navigateToStoreScreen(BuildContext context) {
-    // Import your RiwayatTokoPage here
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(builder: (_) => const RiwayatTokoPage()),
-    // );
+    // TODO: Fetch orders from API/provider
+    // For now, passing empty list as placeholder
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PengirimanPage(
+          orders: [], // TODO: Replace with actual orders data from provider
+          loading: false,
+          onOpenMap: _openMap,
+          onOpenOrder: _openOrder,
+        ),
+      ),
+    );
+  }
+
+  void _openMap(String alamat) {
+    // TODO: Implement map opening
+  }
+
+  void _openOrder(Map<String, dynamic> order) {
+    // TODO: Implement order opening
   }
 
   void showNotifications(BuildContext context) {
@@ -127,6 +145,6 @@ class DashboardOwnerController {
   }
 
   void logout(BuildContext context) {
-    Navigator.pushReplacementNamed(context, '/');
+    handleLogout(context);
   }
 }
