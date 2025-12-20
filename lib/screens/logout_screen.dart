@@ -69,7 +69,7 @@ Future<bool?> showLogoutConfirmation(BuildContext context) async {
 }
 
 // Function untuk menampilkan logout success dialog
-void showLogoutSuccessDialog(BuildContext context) {
+Future<void> showLogoutSuccessDialog(BuildContext context) async {
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -82,22 +82,20 @@ void showLogoutSuccessDialog(BuildContext context) {
         ],
       ),
       content: const Text('Anda telah berhasil logout dari akun.'),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-            // Navigasi ke halaman login
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              '/login',
-              (route) => false,
-            );
-          },
-          child: const Text('OK'),
-        ),
-      ],
     ),
   );
+
+  // Automatically close dialog and navigate after 2 seconds
+  await Future.delayed(const Duration(seconds: 2));
+  if (context.mounted) {
+    Navigator.of(context).pop();
+    // Navigasi ke halaman login
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      '/login',
+      (route) => false,
+    );
+  }
 }
 
 // Reusable success dialog with green check
@@ -108,7 +106,7 @@ Future<void> showSuccessDialog(
   VoidCallback? onOk,
   bool barrierDismissible = false,
 }) async {
-  await showDialog(
+  showDialog(
     context: context,
     barrierDismissible: barrierDismissible,
     builder: (context) => AlertDialog(
@@ -120,17 +118,17 @@ Future<void> showSuccessDialog(
         ],
       ),
       content: Text(message),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-            if (onOk != null) onOk();
-          },
-          child: const Text('OK'),
-        ),
-      ],
     ),
   );
+  
+  // Automatically close dialog and execute callback after 2 seconds
+  await Future.delayed(const Duration(seconds: 2));
+  if (context.mounted) {
+    Navigator.of(context).pop();
+  }
+  if (onOk != null) {
+    onOk();
+  }
 }
 
 // Function untuk menampilkan logout error dialog
@@ -186,7 +184,7 @@ Future<void> handleLogout(BuildContext context) async {
     navigator.pop();
 
     // Tampilkan success dialog
-    showLogoutSuccessDialog(navigator.context);
+    await showLogoutSuccessDialog(navigator.context);
 
   } catch (e) {
     // Tampilkan error dialog

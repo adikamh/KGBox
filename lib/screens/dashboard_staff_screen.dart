@@ -7,6 +7,7 @@ import '../pages/barcode_scanner_page.dart';
 import '../pages/tambah_product_page.dart';
 import '../pages/list_product_page.dart';
 import '../screens/catat_barang_keluar_screen.dart';
+import '../screens/logout_screen.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
 
@@ -335,7 +336,7 @@ class DashboardStaffScreen {
   }
 
   void logout(BuildContext context) {
-    Navigator.pushReplacementNamed(context, '/');
+    handleLogout(context);
   }
 
   // Alert methods

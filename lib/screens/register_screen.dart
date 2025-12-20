@@ -95,24 +95,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
 
     if (result.success) {
-      // show success snackbar
-      messenger.showSnackBar(const SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Row(children: [
-          Icon(Icons.check_circle, color: Colors.white),
-          SizedBox(width: 12),
-          Expanded(child: Text('Akun berhasil dibuat')),
-        ]),
-        backgroundColor: Colors.green,
-        duration: Duration(milliseconds: 1000),
-      ));
-
-      // Redirect to dashboard (user is logged in)
-      if (authProvider.isOwner) {
-        navigator.pushReplacementNamed('/owner/dashboard');
-      } else {
-        navigator.pushReplacementNamed('/staff/dashboard');
-      }
+      // Automatically navigate to login page
+      navigator.pushReplacementNamed('/login');
     } else {
       messenger.showSnackBar(SnackBar(content: Text(result.message!)));
     }

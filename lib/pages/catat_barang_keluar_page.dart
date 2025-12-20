@@ -33,39 +33,43 @@ class CatatBarangKeluarPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text('Catat Barang Keluar'),
-        backgroundColor: const Color(0xFF2965C0),
-        foregroundColor: Colors.white,
-      ),
+      appBar: _buildAppBar(),
       body: Stack(
         children: [
           SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // FORM DETAIL TOKO
-                _buildTokoForm(),
-                const SizedBox(height: 20),
+                // Content Section
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // FORM DETAIL TOKO
+                      _buildTokoForm(),
+                      const SizedBox(height: 24),
 
-                // TOMBOL SCAN
-                _buildScanButton(),
-                const SizedBox(height: 8),
-                _buildSelectButton(),
-                const SizedBox(height: 20),
+                      // TOMBOL SCAN
+                      _buildScanButton(),
+                      const SizedBox(height: 12),
+                      _buildSelectButton(),
+                      const SizedBox(height: 24),
 
-                // LIST BARANG YANG SUDAH DI-SCAN
-                if (scannedProducts.isNotEmpty) ...[
-                  _buildSummaryCard(),
-                  const SizedBox(height: 12),
-                  _buildProductList(),
-                  const SizedBox(height: 20),
-                ],
+                      // LIST BARANG YANG SUDAH DI-SCAN
+                      if (scannedProducts.isNotEmpty) ...[
+                        _buildSummaryHeader(),
+                        const SizedBox(height: 16),
+                        _buildProductList(),
+                        const SizedBox(height: 24),
+                      ],
 
-                // TOMBOL SIMPAN
-                _buildSubmitButton(),
-                const SizedBox(height: 20),
+                      // TOMBOL SIMPAN
+                      _buildSubmitButton(),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -76,7 +80,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
               color: Colors.black.withOpacity(0.5),
               child: const Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2965C0)),
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               ),
             ),
@@ -85,31 +89,108 @@ class CatatBarangKeluarPage extends StatelessWidget {
     );
   }
 
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      elevation: 0,
+      flexibleSpace: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue[700]!, Colors.blue[500]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+      ),
+      foregroundColor: Colors.white,
+      title: const Text(
+        'Catat Barang Keluar',
+        style: TextStyle(fontWeight: FontWeight.w600),
+      ),
+      centerTitle: true,
+    );
+  }
+
+  Widget _buildSummaryHeader() {
+    final formattedTotal = total.toStringAsFixed(0).replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]}.',
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue[100]!),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '${scannedProducts.length} barang',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.blue[700],
+            ),
+          ),
+          Text(
+            'Total Rp $formattedTotal',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.blue[700],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTokoForm() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Detail Customer',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.store_rounded,
+                  size: 20,
+                  color: Colors.blue[700],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Detail Customer',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           _buildTextField(
             controller: namaTokoController,
             label: 'Nama Toko',
@@ -117,7 +198,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
             icon: Icons.store,
             keyboardType: TextInputType.text,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _buildTextField(
             controller: alamatTokoController,
             label: 'Alamat Toko',
@@ -126,7 +207,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
             maxLines: 2,
             keyboardType: TextInputType.streetAddress,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _buildTextField(
             controller: namaPemilikController,
             label: 'Nama Pemilik',
@@ -134,7 +215,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
             icon: Icons.person,
             keyboardType: TextInputType.text,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _buildTextField(
             controller: noTeleponController,
             label: 'No Telepon',
@@ -160,33 +241,41 @@ class CatatBarangKeluarPage extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 12,
+          style: TextStyle(
+            fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: Colors.grey,
+            color: Colors.grey[700],
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         TextField(
           controller: controller,
           maxLines: maxLines,
           keyboardType: keyboardType,
           decoration: InputDecoration(
             hintText: hint,
-            prefixIcon: Icon(icon, color: const Color(0xFF2965C0)),
+            hintStyle: TextStyle(color: Colors.grey[400]),
+            prefixIcon: Icon(icon, color: Colors.blue[700], size: 20),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(
-                color: Color(0xFF2965C0),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Colors.blue[700]!,
                 width: 2,
               ),
             ),
             filled: true,
             fillColor: Colors.grey[50],
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
+          style: TextStyle(color: Colors.grey[800]),
         ),
       ],
     );
@@ -197,15 +286,19 @@ class CatatBarangKeluarPage extends StatelessWidget {
       width: double.infinity,
       child: ElevatedButton.icon(
         onPressed: onScanPressed,
-        icon: const Icon(Icons.qr_code_2),
-        label: const Text('Scan Barang'),
+        icon: const Icon(Icons.qr_code_2, size: 22),
+        label: const Text(
+          'Scan Barang',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF2965C0),
+          backgroundColor: Colors.blue[700],
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
           ),
+          elevation: 2,
         ),
       ),
     );
@@ -216,52 +309,19 @@ class CatatBarangKeluarPage extends StatelessWidget {
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: onSelectProductPressed,
-        icon: const Icon(Icons.list_alt),
-        label: const Text('Pilih Produk'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF2965C0),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+        icon: const Icon(Icons.list_alt, size: 22),
+        label: const Text(
+          'Pilih Produk',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-      ),
-    );
-  }
-
-  Widget _buildSummaryCard() {
-    final formattedTotal = total.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    );
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2965C0).withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF2965C0).withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '${scannedProducts.length} barang',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2965C0),
-            ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.blue[700],
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-          Text(
-            'Total: Rp $formattedTotal',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2965C0),
-            ),
-          ),
-        ],
+          side: BorderSide(color: Colors.blue[700]!, width: 1.5),
+        ),
       ),
     );
   }
@@ -271,7 +331,7 @@ class CatatBarangKeluarPage extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: scannedProducts.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final product = scannedProducts[index];
         return _buildScannedProductCard(index, product);
@@ -286,102 +346,119 @@ class CatatBarangKeluarPage extends StatelessWidget {
     final jumlahInt = jumlah is int ? jumlah : int.tryParse(jumlah.toString()) ?? 0;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Colors.grey[200]!),
       ),
       child: Row(
         children: [
+          // Icon
           Container(
-            width: 50,
-            height: 50,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF2965C0).withOpacity(0.1),
+              color: Colors.blue[50],
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
-              Icons.inventory_2,
-              color: Color(0xFF2965C0),
+            child: Icon(
+              Icons.shopping_bag_rounded,
+              color: Colors.blue[700],
+              size: 22,
             ),
           ),
           const SizedBox(width: 12),
+          // Product Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   product['nama'] ?? 'Tanpa Nama',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
                     fontSize: 13,
+                    color: Colors.grey[800],
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Rp ${hargaInt.toStringAsFixed(0)} × $jumlahInt = Rp ${(hargaInt * jumlahInt).toStringAsFixed(0)}',
-                  style: const TextStyle(
+                  'Rp ${hargaInt.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')} × $jumlahInt = Rp ${(hargaInt * jumlahInt).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}',
+                  style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey,
+                    color: Colors.grey[600],
                   ),
                 ),
+                const SizedBox(height: 2),
                 if (product['id'] != null)
                   Text(
                     'ID: ${product['id']}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey,
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.grey[500],
                     ),
                   ),
               ],
             ),
           ),
-          Row(
-            children: [
-              InkWell(
-                onTap: () => onQuantityChanged(index, jumlahInt - 1),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Icon(Icons.remove, size: 14, color: Colors.red),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  jumlahInt.toString(),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
+          const SizedBox(width: 10),
+          // Quantity Controls
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              children: [
+                InkWell(
+                  onTap: jumlahInt > 1
+                      ? () => onQuantityChanged(index, jumlahInt - 1)
+                      : null,
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(6),
+                        bottomLeft: Radius.circular(6),
+                      ),
+                    ),
+                    child: Icon(Icons.remove, size: 11, color: Colors.red[600]),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              InkWell(
-                onTap: () => onQuantityChanged(index, jumlahInt + 1),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(6),
+                SizedBox(
+                  width: 30,
+                  child: Center(
+                    child: Text(
+                      jumlahInt.toString(),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
-                  child: const Icon(Icons.add, size: 14, color: Colors.green),
                 ),
-              ),
-            ],
+                InkWell(
+                  onTap: () => onQuantityChanged(index, jumlahInt + 1),
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(6),
+                        bottomRight: Radius.circular(6),
+                      ),
+                    ),
+                    child: Icon(Icons.add, size: 11, color: Colors.green[600]),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -391,29 +468,23 @@ class CatatBarangKeluarPage extends StatelessWidget {
   Widget _buildSubmitButton() {
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton(
+      child: ElevatedButton.icon(
         onPressed: isLoading ? null : onSubmitPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+        icon: const Icon(Icons.check_rounded, size: 22),
+        label: Text(
+          isLoading ? 'Memproses...' : 'Simpan Pengiriman',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        child: isLoading
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : const Text(
-                'Simpan Pengiriman',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green[600],
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 2,
+          disabledBackgroundColor: Colors.grey[400],
+        ),
       ),
     );
   }
@@ -443,24 +514,34 @@ class ScannerPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
+        elevation: 0,
         backgroundColor: Colors.black,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Scan Barang', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Scan Barang',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.flip_camera_android),
+            icon: const Icon(Icons.flip_camera_android_rounded),
             onPressed: onSwitchCamera,
+            tooltip: 'Tukar Kamera',
           ),
           IconButton(
-            icon: const Icon(Icons.flash_on),
+            icon: const Icon(Icons.flash_on_rounded),
             onPressed: onToggleTorch,
+            tooltip: 'Flash',
           ),
         ],
       ),
       body: Stack(
         alignment: Alignment.center,
         children: [
-          // Scanner
+          // Scanner Camera
           MobileScanner(
             controller: controller,
             onDetect: (capture) {
@@ -474,49 +555,158 @@ class ScannerPage extends StatelessWidget {
             },
           ),
 
-          // BINGKAI SCAN
+          // Scan Frame
           Container(
             width: 280,
-            height: 180,
+            height: 220,
             decoration: BoxDecoration(
               border: Border.all(color: Colors.white, width: 3),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withOpacity(0.1),
+                  blurRadius: 20,
+                  spreadRadius: 10,
+                ),
+              ],
             ),
           ),
 
-          // ANIMASI GARIS MERAH
+          // Animated Scan Line
           AnimatedBuilder(
             animation: scanLineAnim,
             builder: (_, __) {
               return Positioned(
-                top: MediaQuery.of(context).size.height / 2 - 90 + scanLineAnim.value,
+                top: MediaQuery.of(context).size.height / 2 - 110 + (scanLineAnim.value * 220),
                 child: Container(
-                  width: 260,
+                  width: 274,
                   height: 2,
-                  color: Colors.redAccent,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.red.withOpacity(0),
+                        Colors.red,
+                        Colors.red.withOpacity(0),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red,
+                        blurRadius: 10,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
           ),
 
-          // INFO TEXT
+          // Corner Indicators
           Positioned(
-            bottom: 120,
+            top: MediaQuery.of(context).size.height / 2 - 110,
+            left: MediaQuery.of(context).size.width / 2 - 140,
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: Colors.white, width: 3),
+                  left: BorderSide(color: Colors.white, width: 3),
+                ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.of(context).size.height / 2 - 110,
+            right: MediaQuery.of(context).size.width / 2 - 140,
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: Colors.white, width: 3),
+                  right: BorderSide(color: Colors.white, width: 3),
+                ),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: MediaQuery.of(context).size.height / 2 - 110,
+            left: MediaQuery.of(context).size.width / 2 - 140,
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Colors.white, width: 3),
+                  left: BorderSide(color: Colors.white, width: 3),
+                ),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: MediaQuery.of(context).size.height / 2 - 110,
+            right: MediaQuery.of(context).size.width / 2 - 140,
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Colors.white, width: 3),
+                  right: BorderSide(color: Colors.white, width: 3),
+                ),
+                borderRadius: const BorderRadius.only(
+                  bottomRight: Radius.circular(12),
+                ),
+              ),
+            ),
+          ),
+
+          // Info Section
+          Positioned(
+            bottom: 60,
+            left: 0,
+            right: 0,
             child: Column(
               children: [
-                Text(
-                  "Arahkan kamera ke barcode",
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 16,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  "$scannedProductsCount item terscan",
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 12,
+                  child: Column(
+                    children: [
+                      Text(
+                        "Arahkan kamera ke barcode",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "$scannedProductsCount item terscan",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
