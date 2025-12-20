@@ -12,12 +12,12 @@ class DetailProductPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final DetailProductScreen _controller = DetailProductScreen();
-    _controller.initialize(product);
+    final DetailProductScreen controller = DetailProductScreen();
+    controller.initialize(product);
     
-    final formattedProduct = _controller.getFormattedProduct();
-    final isExpired = _controller.isProductExpired();
-    final isStockLow = _controller.isStockLow();
+    final formattedProduct = controller.getFormattedProduct();
+    final isExpired = controller.isProductExpired();
+    final isStockLow = controller.isStockLow();
     
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -27,7 +27,7 @@ class DetailProductPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header with product info
-            _buildHeader(_controller, formattedProduct, isExpired, isStockLow),
+            _buildHeader(controller, formattedProduct, isExpired, isStockLow),
             
             // Body with details
             Padding(
@@ -35,12 +35,12 @@ class DetailProductPage extends StatelessWidget {
               child: Column(
                 children: [
                   // Price and Stock Cards
-                  _buildStatsRow(_controller, formattedProduct),
+                  _buildStatsRow(controller, formattedProduct),
                   
                   const SizedBox(height: 20),
                   
                   // Product Information Card
-                  _buildInfoCard(_controller, formattedProduct),
+                  _buildInfoCard(controller, formattedProduct),
                   
                   const SizedBox(height: 16),
                   // If product has multiple units, show list of unit ids
@@ -80,7 +80,7 @@ class DetailProductPage extends StatelessWidget {
                   const SizedBox(height: 24),
                   
                   // Action Buttons
-                  _buildActionButtons(context, _controller, formattedProduct),
+                  _buildActionButtons(context, controller, formattedProduct),
                 ],
               ),
             ),
