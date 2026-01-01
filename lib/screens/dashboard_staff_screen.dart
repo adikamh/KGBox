@@ -274,8 +274,20 @@ class DashboardStaffScreen {
         builder: (_) => const BarcodeScannerPage(userRole: ''),
       ),
     ).then((result) {
-      if (result != null && result is String && result.isNotEmpty) {
-        try {
+      if (result != null) {
+        String? barcodeArg;
+        if (result is String && result.isNotEmpty) {
+          barcodeArg = result;
+        } else if (result is Map && result.isNotEmpty) {
+          try {
+            final keys = result.keys.map((k) => k.toString()).where((s) => s.isNotEmpty).toList();
+            if (keys.isNotEmpty) barcodeArg = keys.join(',');
+          } catch (_) {
+            barcodeArg = null;
+          }
+        }
+
+        if (barcodeArg != null && barcodeArg.isNotEmpty) {
           final auth = Provider.of<AuthProvider>(context, listen: false);
           final user = auth.currentUser;
           final ownerId = user?.ownerId ?? user?.id ?? '';
@@ -285,18 +297,8 @@ class DashboardStaffScreen {
             MaterialPageRoute(
               builder: (_) => AddProductPage(
                 userRole: '',
-                barcode: result,
+                barcode: barcodeArg,
                 ownerId: ownerId,
-              ),
-            ),
-          );
-        } catch (e) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AddProductPage(
-                userRole: '',
-                barcode: result,
               ),
             ),
           );

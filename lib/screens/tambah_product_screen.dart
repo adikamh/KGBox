@@ -1,13 +1,12 @@
 // lib/screens/add_product_screen.dart
 import 'package:flutter/material.dart';
-import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../pages/barcode_scanner_page.dart';
-import '../services/restapi.dart';
-import '../services/config.dart';
-import '../models/product_model.dart';
+// removed unused imports
 
 class AddProductScreen {
-  final DataService _dataService = DataService();
+  // DataService removed (not used here)
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
   // Product data
   String productId = '';
@@ -21,7 +20,6 @@ class AddProductScreen {
   TextEditingController? codeController;
   TextEditingController? merekController;
   TextEditingController? hargaController;
-  TextEditingController? jumlahController;
   TextEditingController? tanggalExpiredController;
   
   // Initialize
@@ -32,14 +30,12 @@ class AddProductScreen {
     TextEditingController? codeCtrl,
     TextEditingController? merekCtrl,
     TextEditingController? hargaCtrl,
-    TextEditingController? jumlahCtrl,
     TextEditingController? tanggalExpiredCtrl,
   }) {
     nameController = nameCtrl ?? TextEditingController();
     codeController = codeCtrl ?? TextEditingController();
     merekController = merekCtrl ?? TextEditingController();
     hargaController = hargaCtrl ?? TextEditingController();
-    jumlahController = jumlahCtrl ?? TextEditingController(text: '1');
     tanggalExpiredController = tanggalExpiredCtrl ?? TextEditingController();
     this.ownerId = ownerId;
     
@@ -95,13 +91,6 @@ class AddProductScreen {
       errors['harga'] = 'Harga harus berupa angka';
     }
     
-    // Jumlah Stok
-    final jumlahText = jumlahController?.text.trim() ?? '';
-    if (jumlahText.isEmpty) {
-      errors['jumlah'] = 'Jumlah stok wajib diisi';
-    } else if (int.tryParse(jumlahText) == null) {
-      errors['jumlah'] = 'Jumlah harus berupa angka';
-    }
     
     // Tanggal Expired
     if (tanggalExpiredController?.text.trim().isEmpty ?? true) {
@@ -112,7 +101,7 @@ class AddProductScreen {
   }
   
   // Add product to database
-  Future<Map<String, dynamic>> addProduct() async {
+  Future<Map<String, dynamic>> addProduct({String? supplierId, String? supplierName}) async {
     // Validate form
     final errors = validateForm();
     if (errors.isNotEmpty) {
@@ -123,35 +112,34 @@ class AddProductScreen {
       };
     }
     
-    final int jumlah = int.tryParse(jumlahController!.text.trim()) ?? 0;
-    final List<String> barcodeList = List<String>.filled(jumlah, codeController?.text ?? productId);
+    // When adding without scanned barcodes, product will be created without barcode entries.
 
-    final product = ProductModel(
-      id: productId,
-      id_product: productId,
-      nama_product: nameController!.text.trim(),
-      kategori_product: selectedCategory,
-      merek_product: merekController!.text.trim(),
-      tanggal_beli: _formatCurrentDateTime(),
-      harga_product: hargaController!.text.trim(),
-      jumlah_produk: jumlahController!.text.trim(),
-      barcode_list: barcodeList,
-      ownerid: ownerId ?? '',
-      tanggal_expired: tanggalExpiredController!.text.trim(),
-    );
-    
+    // Create master product document in 'products' collection
+    final String masterId = (productId.isNotEmpty && productId != codeController?.text) ? productId : _generateProductId();
+    final Map<String, dynamic> productDoc = {
+      'productId': masterId,
+      'nama': nameController!.text.trim(),
+      'brand': merekController!.text.trim(),
+      'category': selectedCategory,
+      'price': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
+      'sellingPrice': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
+      'productionDate': _formatCurrentDateTime(),
+      'expiredDate': tanggalExpiredController!.text.trim(),
+      'supplierId': supplierId ?? '',
+      'supplierName': supplierName ?? '',
+      'createdAt': FieldValue.serverTimestamp(),
+      'ownerId': ownerId ?? '',
+    };
+
     try {
-      final data = Map<String, dynamic>.from(product.toJson());
-      // Ensure barcode_list stored as JSON string for API
-      data['barcode_list'] = jsonEncode(product.barcode_list);
-      // Ensure owner id is included
-      data['ownerid'] = ownerId ?? '';
-      await _dataService.insertOne(token, project, 'product', appid, data);
+      await _firestore.collection('products').doc(masterId).set(productDoc);
+
+      // No scanned barcodes: do not create `product_barcode` documents here.
 
       return {
         'success': true,
         'message': 'Produk berhasil ditambahkan',
-        'product': product.toJson(),
+        'product': productDoc,
       };
     } catch (e) {
       return {
@@ -163,10 +151,10 @@ class AddProductScreen {
   }
 
   // Add products from scanned barcodes: create one product per barcode occurrence.
-  Future<Map<String, dynamic>> addProductsFromScans(List<String> barcodes) async {
+  Future<Map<String, dynamic>> addProductsFromScans(List<String> barcodes, {String? supplierId, String? supplierName}) async {
     // Validate required fields (except jumlah which will be per-item)
     final errors = validateForm();
-    errors.remove('jumlah');
+    // jumlah field removed; no need to remove validation key
     if (errors.isNotEmpty) {
       return {
         'success': false,
@@ -175,44 +163,62 @@ class AddProductScreen {
       };
     }
 
+    // Create one master product and then add all scanned barcodes to product_barcode
+    final String masterId = _generateProductId();
+    final Map<String, dynamic> productDoc = {
+      'productId': masterId,
+      'nama': nameController!.text.trim(),
+      'brand': merekController!.text.trim(),
+      'category': selectedCategory,
+      'price': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
+      'sellingPrice': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
+      'productionDate': _formatCurrentDateTime(),
+      'expiredDate': tanggalExpiredController!.text.trim(),
+      'supplierId': supplierId ?? '',
+      'supplierName': supplierName ?? '',
+      'createdAt': FieldValue.serverTimestamp(),
+      'ownerId': ownerId ?? '',
+    };
+
     final List<Map<String, dynamic>> results = [];
 
-    for (final barcode in barcodes) {
-      final prodId = barcode.isNotEmpty ? barcode : _generateProductId();
-      final product = ProductModel(
-        id: prodId,
-        id_product: prodId,
-        nama_product: nameController!.text.trim(),
-        kategori_product: selectedCategory,
-        merek_product: merekController!.text.trim(),
-        tanggal_beli: _formatCurrentDateTime(),
-        harga_product: hargaController!.text.trim(),
-        jumlah_produk: '1',
-        barcode_list: [barcode],
-        ownerid: ownerId ?? '',
-        tanggal_expired: tanggalExpiredController!.text.trim(),
-      );
+    try {
+      await _firestore.collection('products').doc(masterId).set(productDoc);
 
-      try {
-        final data = Map<String, dynamic>.from(product.toJson());
-        data['barcode_list'] = jsonEncode([barcode]);
-        data['ownerid'] = ownerId ?? '';
-        await _dataService.insertOne(token, project, 'product', appid, data);
-        results.add({'barcode': barcode, 'success': true, 'product': product.toJson()});
-      } catch (e) {
-        results.add({'barcode': barcode, 'success': false, 'error': e.toString()});
+      for (final barcode in barcodes) {
+        try {
+          if (barcode.trim().isEmpty) {
+            results.add({'barcode': barcode, 'success': false, 'error': 'Empty barcode'});
+            continue;
+          }
+          // store barcode as document ID under 'product_barcodes' for easy querying
+          await _firestore.collection('product_barcodes').doc(barcode.trim()).set({
+            'productId': masterId,
+            'scannedAt': FieldValue.serverTimestamp(),
+          });
+          results.add({'barcode': barcode, 'success': true});
+        } catch (e) {
+          results.add({'barcode': barcode, 'success': false, 'error': e.toString()});
+        }
       }
+
+      final successCount = results.where((r) => r['success'] == true).length;
+      final failCount = results.length - successCount;
+
+      return {
+        'success': failCount == 0,
+        'message': 'Batch insert selesai',
+        'results': results,
+        'total': results.length,
+        'product': productDoc,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Gagal menambahkan batch: $e',
+        'error': e.toString(),
+      };
     }
-
-    final successCount = results.where((r) => r['success'] == true).length;
-    final failCount = results.length - successCount;
-
-    return {
-      'success': failCount == 0,
-      'message': 'Batch insert selesai',
-      'results': results,
-      'total': results.length,
-    };
   }
   
   // Scan barcode callback - returns either a String (single barcode)
@@ -256,7 +262,6 @@ class AddProductScreen {
     codeController?.dispose();
     merekController?.dispose();
     hargaController?.dispose();
-    jumlahController?.dispose();
     tanggalExpiredController?.dispose();
   }
 }

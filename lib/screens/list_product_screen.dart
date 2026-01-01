@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:kgbox/models/product_model.dart';
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/config.dart';
 import '../services/restApi.dart';
 import '../pages/detail_product_page.dart';
@@ -19,62 +20,69 @@ class ListProductScreen {
     isLoading = true;
     
     try {
-      debugPrint("🔄 Memulai request ke API...");
-      var result = await _dataService.selectAll(token, project, collection, appid);
-      
-      debugPrint("📦 Response diterima: ${result.runtimeType}");
-      debugPrint("📦 Response content: $result");
-
-      if (result == null) {
-        throw Exception('Response null dari server');
+      debugPrint("🔄 Memuat produk dari Firestore 'products'...");
+      final firestore = FirebaseFirestore.instance;
+      Query query = firestore.collection('products');
+      if (ownerId != null && ownerId.isNotEmpty) {
+        // assume ownerId field is stored as 'ownerId' in Firestore
+        query = query.where('ownerId', isEqualTo: ownerId);
       }
 
-      // Parse JSON dengan aman
-      dynamic parsedData;
-      if (result is String) {
-        parsedData = jsonDecode(result);
-      } else if (result is Map) {
-        parsedData = result;
-      } else {
-        parsedData = jsonDecode(result.toString());
-      }
+      final snapshot = await query.get();
+      final dataList = snapshot.docs;
+      debugPrint("✅ Ditemukan ${dataList.length} dokumen produk di Firestore");
 
-      debugPrint("📊 Parsed data type: ${parsedData.runtimeType}");
+      // Build master products from documents (doc.id is productId)
+      final Map<String, Map<String, dynamic>> masterMap = {};
+      for (final doc in dataList) {
+        final raw = (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final prodId = doc.id;
+        final name = (raw['nama'] ?? raw['name'] ?? '').toString();
+        final category = (raw['category'] ?? raw['kategori'] ?? '').toString();
+        final brand = (raw['brand'] ?? raw['merek'] ?? '').toString();
+        final expired = (raw['expiredDate'] ?? raw['tanggal_expired'] ?? '').toString();
 
-      // Extract data array
-      List dataList = [];
-      if (parsedData is Map && parsedData.containsKey('data')) {
-        dataList = parsedData['data'] as List? ?? [];
-      } else if (parsedData is List) {
-        dataList = parsedData;
-      }
-
-      debugPrint("✅ Jumlah data: ${dataList.length}");
-
-      // Convert ke format lokal (filter by ownerId jika diberikan)
-      List<Map<String, dynamic>> tempProducts = [];
-      for (var item in dataList) {
-        if (item is Map) {
-          // Jika ownerId diberikan, hanya masukkan item yang cocok
-          if (ownerId != null && ownerId.isNotEmpty) {
-            final itemOwner = (item['ownerid'] ?? item['ownerId'] ?? '').toString();
-            if (itemOwner != ownerId) continue;
+        // parse possible timestamp
+        DateTime updated = DateTime.now();
+        try {
+          final created = raw['createdAt'] ?? raw['productionDate'] ?? raw['production_date'];
+          if (created is Timestamp) {
+            updated = created.toDate();
+          } else if (created is String) {
+            updated = DateTime.tryParse(created) ?? DateTime.now();
           }
-          tempProducts.add({
-            'id': item['id']?.toString() ?? '',
-            'name': item['nama_product']?.toString() ?? 'Produk',
-            'category': item['kategori_product']?.toString() ?? 'Umum',
-            'price': _safeInt(item['harga_product']),
-            'stock': _safeInt(item['jumlah_produk']),
-            'updated': _safeDateTime(item['tanggal_beli']),
-            'brand': item['merek_product']?.toString() ?? '',
-            'expired': item['tanggal_expired']?.toString() ?? '',
-            'full': item,
-          });
-        }
+        } catch (_) {}
+
+        masterMap[prodId] = {
+          'id': prodId,
+          'name': name.isNotEmpty ? name : prodId,
+          'category': category.isNotEmpty ? category : 'Umum',
+          'price': _safeInt(raw['price'] ?? raw['harga'] ?? 0),
+          'stock': 0,
+          'updated': updated,
+          'brand': brand,
+          'expired': expired,
+          'full': [raw],
+        };
       }
 
-      products = tempProducts;
+      // Count barcodes for each productId
+      final Map<String, int> counts = {};
+      final futures = masterMap.keys.map((pk) async {
+        try {
+          final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: pk).get();
+          counts[pk] = q.size;
+        } catch (e) {
+          counts[pk] = 0;
+        }
+      }).toList();
+      await Future.wait(futures);
+
+      for (final pk in masterMap.keys) {
+        masterMap[pk]!['stock'] = counts[pk] ?? 0;
+      }
+
+      products = masterMap.values.toList();
       debugPrint("✅ Berhasil load ${products.length} produk");
 
     } catch (e, stack) {
@@ -90,16 +98,17 @@ class ListProductScreen {
   List<Map<String, dynamic>> getFilteredProducts(String searchQuery) {
     final query = searchQuery.toLowerCase();
     
-    return products.where((product) {
+      return products.where((product) {
       // Filter by category
-      if (filter != 'Semua' && product['category'] != filter) {
+      final prodCategory = (product['category'] ?? '').toString();
+      if (filter != 'Semua' && prodCategory != filter) {
         return false;
       }
       
       // Filter by search query
       if (query.isNotEmpty) {
-        final nameMatch = product['name'].toLowerCase().contains(query);
-        final brandMatch = product['brand'].toLowerCase().contains(query);
+        final nameMatch = (product['name'] ?? '').toString().toLowerCase().contains(query);
+        final brandMatch = (product['brand'] ?? '').toString().toLowerCase().contains(query);
         return nameMatch || brandMatch;
       }
       
@@ -245,7 +254,7 @@ class ListProductScreen {
   ) {
      // If 'full' contains a list of items (grouped), build an aggregated map
      final full = product['full'];
-     if (full is List) {
+     if (full != null && full is List) {
        final items = full.cast<Map<String, dynamic>>();
        // aggregate into a single map expected by DetailProductPage
        final int totalStock = items.fold<int>(0, (s, it) => s + (_safeInt(it['jumlah_produk'])));
@@ -262,12 +271,14 @@ class ListProductScreen {
        return;
      }
 
-     Navigator.push(
-       context,
-       MaterialPageRoute(
-         builder: (_) => DetailProductPage(product: product['full']),
-       ),
-     );
+     if (full != null) {
+       Navigator.push(
+         context,
+         MaterialPageRoute(
+           builder: (_) => DetailProductPage(product: full),
+         ),
+       );
+     }
   }
   
   // Navigate to edit screen and return updated product map (if any)
@@ -275,8 +286,8 @@ class ListProductScreen {
     BuildContext context,
     Map<String, dynamic> product,
   ) async {
-     final full = product['full'];
-     final Map<String, dynamic> target = (full is List && full.isNotEmpty) ? full.first as Map<String, dynamic> : (full as Map<String, dynamic>);
+    final full = product['full'];
+    final Map<String, dynamic> target = (full is List && full.isNotEmpty) ? (full.first as Map<String, dynamic>) : ((full as Map<String, dynamic>?) ?? <String, dynamic>{});
      final result = await Navigator.push<Map<String, dynamic>?>(
        context,
        MaterialPageRoute(

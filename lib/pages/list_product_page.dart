@@ -1,6 +1,9 @@
 // lib/pages/list_product_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/restapi.dart';
+import '../services/config.dart';
 import '../screens/list_product_screen.dart';
 import '../providers/auth_provider.dart';
 
@@ -330,44 +333,65 @@ class _ListProductPageState extends State<ListProductPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          PopupMenuButton<int>(
-                            icon: Icon(
-                              Icons.more_vert_rounded,
-                              color: Colors.grey[600],
-                              size: 22,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            itemBuilder: (ctx) => [
-                              const PopupMenuItem(
-                                value: 1,
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.edit_rounded, size: 20, color: Colors.blue),
-                                    SizedBox(width: 12),
-                                    Text('Edit'),
-                                  ],
-                                ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.edit_rounded, color: Colors.blue, size: 20),
+                                tooltip: 'Edit produk',
+                                onPressed: () async {
+                                  final res = await _controller.navigateToEdit(context, product);
+                                  if (res != null) {
+                                    // reload list after edit
+                                    await _loadProducts();
+                                    if (mounted) setState(() {});
+                                  }
+                                },
                               ),
-                              const PopupMenuItem(
-                                value: 2,
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete_rounded, size: 20, color: Colors.red),
-                                    SizedBox(width: 12),
-                                    Text('Hapus'),
-                                  ],
+                              PopupMenuButton<int>(
+                                icon: Icon(
+                                  Icons.more_vert_rounded,
+                                  color: Colors.grey[600],
+                                  size: 22,
                                 ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                itemBuilder: (ctx) => [
+                                  const PopupMenuItem(
+                                    value: 1,
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.edit_rounded, size: 20, color: Colors.blue),
+                                        SizedBox(width: 12),
+                                        Text('Edit'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 2,
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.delete_rounded, size: 20, color: Colors.red),
+                                        SizedBox(width: 12),
+                                        Text('Hapus'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                onSelected: (value) async {
+                                  if (value == 1) {
+                                    final res = await _controller.navigateToEdit(context, product);
+                                    if (res != null) {
+                                      await _loadProducts();
+                                      if (mounted) setState(() {});
+                                    }
+                                  } else if (value == 2) {
+                                    await _handleDeleteProduct(product);
+                                  }
+                                },
                               ),
                             ],
-                            onSelected: (value) async {
-                              if (value == 1) {
-                                _controller.navigateToEdit(context, product);
-                              } else if (value == 2) {
-                                await _handleDeleteProduct(product);
-                              }
-                            },
                           ),
                         ],
                       ),
@@ -596,52 +620,119 @@ class _ListProductPageState extends State<ListProductPage> {
   }
 
   Future<void> _handleDeleteProduct(Map<String, dynamic> product) async {
-    final confirm = await _controller.showDeleteConfirmation(
-      context,
-      product['name'],
+    // Ask whether to delete whole product or a single barcode
+    final choice = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Produk'),
+        content: const Text('Hapus seluruh produk beserta semua barcode, atau hapus hanya satu barcode?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: const Text('Batal')),
+          TextButton(onPressed: () => Navigator.pop(ctx, 'single'), child: const Text('Hapus 1 Barcode')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, 'all'), child: const Text('Hapus Semua')),
+        ],
+      ),
     );
-    
-    if (confirm == true) {
-      final result = await _controller.deleteProduct(product['id']);
-      
-      if (!mounted) return;
-      
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(child: Text(result['message'])),
-              ],
-            ),
-            backgroundColor: Colors.green[600],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-        await _refreshProducts();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(child: Text(result['message'])),
-              ],
-            ),
-            backgroundColor: Colors.red[600],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
+
+    if (choice == null || choice == 'cancel') return;
+
+    final firestore = FirebaseFirestore.instance;
+    final api = DataService();
+
+    // Build list of unit ids/barcodes from product['full']
+    final List<String> unitIds = [];
+    final full = product['full'];
+    if (full is List) {
+      for (final u in full) {
+        if (u is Map) {
+          final id = (u['id_product'] ?? u['id'] ?? u['_id'] ?? u['kode'] ?? u['barcode'] ?? '').toString();
+          if (id.isNotEmpty && !unitIds.contains(id)) unitIds.add(id);
+        }
       }
+    } else if (full is Map) {
+      final id = (full['id_product'] ?? full['id'] ?? full['_id'] ?? full['kode'] ?? full['barcode'] ?? '').toString();
+      if (id.isNotEmpty) unitIds.add(id);
     }
+
+    if (choice == 'single') {
+      // Ask which barcode to delete
+      if (unitIds.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada barcode/unit yang dapat dihapus')));
+        return;
+      }
+      String? selected = unitIds.length == 1 ? unitIds.first : null;
+      final pick = await showDialog<String?>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Pilih Barcode untuk dihapus'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: unitIds.length,
+              itemBuilder: (c, i) {
+                final v = unitIds[i];
+                return RadioListTile<String>(
+                  value: v,
+                  groupValue: selected,
+                  title: Text(v),
+                  onChanged: (val) { selected = val; Navigator.of(ctx).pop(val); },
+                );
+              },
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal'))],
+        ),
+      );
+
+      if (pick == null) return;
+
+      // Delete single barcode from Firestore and attempt server delete
+      try {
+        await firestore.collection('product_barcodes').doc(pick).delete();
+      } catch (_) {}
+      try {
+        await api.removeId(token, project, collection, appid, pick);
+      } catch (_) {}
+
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barcode berhasil dihapus')));
+      await _refreshProducts();
+      return;
+    }
+
+    // choice == 'all' -> delete product record and all related barcode documents
+    final confirm = await _controller.showDeleteConfirmation(context, product['name']);
+    if (confirm != true) return;
+
+    final serverResult = await _controller.deleteProduct(product['id']);
+    // Attempt to delete Firestore product doc(s) and barcode docs
+    try {
+      // Determine possible product master id from first unit
+      String masterId = '';
+      if (full is List && full.isNotEmpty && full.first is Map) {
+        final fm = full.first as Map<String, dynamic>;
+        masterId = (fm['id_product'] ?? fm['id'] ?? fm['_id'] ?? '').toString();
+      }
+      if (masterId.isNotEmpty) {
+        // delete master product doc
+        try { await firestore.collection('products').doc(masterId).delete(); } catch (_) {}
+        // delete all barcode docs with productId == masterId
+        final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: masterId).get();
+        for (final d in q.docs) {
+          try { await d.reference.delete(); } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('Error deleting Firestore docs: $e');
+    }
+
+    if (!mounted) return;
+    if (serverResult['success'] == true) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(serverResult['message'] ?? 'Produk dihapus'), backgroundColor: Colors.green[600]));
+      await _refreshProducts();
+    } else {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(serverResult['message'] ?? 'Gagal menghapus'), backgroundColor: Colors.red[600]));
+    }
+    return;
   }
 }

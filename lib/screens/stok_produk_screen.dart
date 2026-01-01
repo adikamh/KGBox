@@ -4,6 +4,7 @@ import '../services/restapi.dart';
 import '../services/config.dart';
 import '../pages/stok_produk_page.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/auth_provider.dart';
 
 class StokProdukScreen extends StatefulWidget {
@@ -44,8 +45,36 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
       final data = List<Map<String, dynamic>>.from(
         jsonRes is Map ? (jsonRes['data'] ?? []) : (jsonRes is List ? jsonRes : [])
       );
-      
-      setState(() => _products = data);
+
+      // compute stock counts from Firestore product_barcodes collection
+      final firestore = FirebaseFirestore.instance;
+      final Map<String, int> counts = {};
+      final Set<String> productKeys = {};
+      for (final item in data) {
+        final pk = (item['id_product'] ?? item['id'] ?? item['_id'] ?? '').toString();
+        if (pk.isNotEmpty) productKeys.add(pk);
+      }
+      final futures = productKeys.map((pk) async {
+        try {
+          final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: pk).get();
+          counts[pk] = q.size;
+        } catch (e) {
+          counts[pk] = 0;
+        }
+      }).toList();
+      await Future.wait(futures);
+
+      // attach stock count to each product item
+      final enriched = data.map((item) {
+        final pk = (item['id_product'] ?? item['id'] ?? item['_id'] ?? '').toString();
+        final stock = counts[pk] ?? 0;
+        final Map<String, dynamic> copy = Map<String, dynamic>.from(item);
+        copy['stok'] = stock;
+        copy['jumlah_produk'] = stock.toString();
+        return copy;
+      }).toList();
+
+      setState(() => _products = enriched);
     } catch (e) {
       debugPrint('Error loading products: $e');
       if (mounted) {

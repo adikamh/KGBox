@@ -1,5 +1,8 @@
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/restapi.dart';
+import '../services/config.dart';
 import '../screens/detail_product_screen.dart';
 
 class DetailProductPage extends StatelessWidget {
@@ -550,30 +553,100 @@ class DetailProductPage extends StatelessWidget {
               height: 52,
               child: ElevatedButton.icon(
                 onPressed: () async {
-                  final confirm = await controller.showDeleteConfirmation(
-                    context,
-                    product['name'],
+                  // Ask whether to delete whole product or single barcode
+                  final choice = await showDialog<String?>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Hapus Produk'),
+                      content: const Text('Hapus seluruh produk beserta semua barcode, atau hapus hanya satu barcode?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: const Text('Batal')),
+                        TextButton(onPressed: () => Navigator.pop(ctx, 'single'), child: const Text('Hapus 1 Barcode')),
+                        ElevatedButton(onPressed: () => Navigator.pop(ctx, 'all'), child: const Text('Hapus Semua')),
+                      ],
+                    ),
                   );
-                  
-                  if (confirm == true) {
-                    final result = await controller.deleteProduct();
-                    
-                    if (result['success'] == true) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(result['message']),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                      Navigator.of(context).pop(true);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(result['message']),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+
+                  if (choice == null || choice == 'cancel') return;
+
+                  final firestore = FirebaseFirestore.instance;
+                  final api = DataService();
+
+                  // collect unit ids/barcodes
+                  final List<String> unitIds = [];
+                  final full = product['full'];
+                  if (full is List) {
+                    for (final u in full) {
+                      if (u is Map) {
+                        final id = (u['id_product'] ?? u['id'] ?? u['_id'] ?? u['kode'] ?? u['barcode'] ?? '').toString();
+                        if (id.isNotEmpty && !unitIds.contains(id)) unitIds.add(id);
+                      }
                     }
+                  } else if (full is Map) {
+                    final id = (full['id_product'] ?? full['id'] ?? full['_id'] ?? full['kode'] ?? full['barcode'] ?? '').toString();
+                    if (id.isNotEmpty) unitIds.add(id);
+                  }
+
+                  if (choice == 'single') {
+                    if (unitIds.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada barcode/unit yang dapat dihapus')));
+                      return;
+                    }
+                    String? selected = unitIds.length == 1 ? unitIds.first : null;
+                    final pick = await showDialog<String?>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Pilih Barcode untuk dihapus'),
+                        content: SizedBox(
+                          width: double.maxFinite,
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: unitIds.length,
+                            itemBuilder: (c, i) {
+                              final v = unitIds[i];
+                              return RadioListTile<String>(
+                                value: v,
+                                groupValue: selected,
+                                title: Text(v),
+                                onChanged: (val) { selected = val; Navigator.of(ctx).pop(val); },
+                              );
+                            },
+                          ),
+                        ),
+                        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal'))],
+                      ),
+                    );
+                    if (pick == null) return;
+                    try { await firestore.collection('product_barcodes').doc(pick).delete(); } catch (_) {}
+                    try { await api.removeId(token, project, collection, appid, pick); } catch (_) {}
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barcode berhasil dihapus')));
+                    Navigator.of(context).pop(true);
+                    return;
+                  }
+
+                  // delete all
+                  final confirm = await controller.showDeleteConfirmation(context, product['name']);
+                  if (confirm != true) return;
+                  final result = await controller.deleteProduct();
+                  // try delete firestore docs
+                  try {
+                    String masterId = '';
+                    if (full is List && full.isNotEmpty && full.first is Map) {
+                      final fm = full.first as Map<String, dynamic>;
+                      masterId = (fm['id_product'] ?? fm['id'] ?? fm['_id'] ?? '').toString();
+                    }
+                    if (masterId.isNotEmpty) {
+                      try { await firestore.collection('products').doc(masterId).delete(); } catch (_) {}
+                      final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: masterId).get();
+                      for (final d in q.docs) { try { await d.reference.delete(); } catch (_) {} }
+                    }
+                  } catch (e) { debugPrint('Error deleting Firestore docs: $e'); }
+
+                  if (result['success'] == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.green));
+                    Navigator.of(context).pop(true);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
                   }
                 },
                 style: ElevatedButton.styleFrom(
