@@ -164,11 +164,37 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
             ElevatedButton(onPressed: () async {
               try {
-                await FirebaseFirestore.instance.collection('stock_requests').doc(docId).update({
+                final firestore = FirebaseFirestore.instance;
+                await firestore.collection('stock_requests').doc(docId).update({
                   'status': selected,
                   'catatan': noteCtrl.text,
                   'updated_at': DateTime.now().toIso8601String(),
                 });
+
+                // If status changed to 'diterima', create a notification
+                try {
+                  final prev = currentStatus.toString().toLowerCase();
+                  final selectedLower = selected.toString().toLowerCase();
+                  if ((selectedLower == 'diterima' || selectedLower == 'ditolak') && prev != selectedLower) {
+                    final title = selectedLower == 'diterima' ? 'Permintaan Stok Diterima' : 'Permintaan Stok Ditolak';
+                    final body = selectedLower == 'diterima'
+                        ? 'Permintaan untuk ${request['product_name'] ?? request['product_name'] ?? ''} telah diterima.'
+                        : 'Permintaan untuk ${request['product_name'] ?? request['product_name'] ?? ''} ditolak.';
+                    final notif = {
+                      'ownerid': request['ownerid'] ?? request['ownerId'] ?? '',
+                      'type': 'stock_request',
+                      'title': title,
+                      'body': body,
+                      'permintaan_id': docId,
+                      'status': selected,
+                      'created_at': DateTime.now().toIso8601String(),
+                    };
+                    await firestore.collection('notifications').add(notif);
+                  }
+                } catch (eNotif) {
+                  debugPrint('Failed creating notification: $eNotif');
+                }
+
                 Navigator.pop(ctx, true);
               } catch (e) {
                 Navigator.pop(ctx, false);
