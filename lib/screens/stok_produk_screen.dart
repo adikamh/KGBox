@@ -33,41 +33,61 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final user = auth.currentUser;
       final ownerId = user?.ownerId ?? user?.id ?? '';
-      
-      dynamic res;
-      if (ownerId.isNotEmpty) {
-        res = await _api.selectWhere(token, project, 'product', appid, 'ownerid', ownerId);
-      } else {
-        res = await _api.selectAll(token, project, 'product', appid);
-      }
 
-      final jsonRes = res is String ? json.decode(res) : res;
-      final data = List<Map<String, dynamic>>.from(
-        jsonRes is Map ? (jsonRes['data'] ?? []) : (jsonRes is List ? jsonRes : [])
-      );
-
-      // compute stock counts from Firestore product_barcodes collection
       final firestore = FirebaseFirestore.instance;
-      final Map<String, int> counts = {};
-      final Set<String> productKeys = {};
-      for (final item in data) {
-        final pk = (item['id_product'] ?? item['id'] ?? item['_id'] ?? '').toString();
-        if (pk.isNotEmpty) productKeys.add(pk);
+      Query<Map<String, dynamic>> q = firestore.collection('products');
+      if (ownerId.isNotEmpty) {
+        final q1 = firestore.collection('products').where('ownerid', isEqualTo: ownerId);
+        final snap1 = await q1.limit(1).get();
+        if (snap1.docs.isNotEmpty) {
+          q = q1;
+        } else {
+          final q2 = firestore.collection('products').where('ownerId', isEqualTo: ownerId);
+          final snap2 = await q2.limit(1).get();
+          if (snap2.docs.isNotEmpty) q = q2;
+        }
       }
-      final futures = productKeys.map((pk) async {
+
+      final snap = await q.get();
+      final docs = snap.docs;
+
+      // gather product ids and build initial map
+      final List<Map<String, dynamic>> items = [];
+      final Set<String> productIds = {};
+      for (final d in docs) {
+        final m = d.data();
+        final pid = d.id;
+        productIds.add(pid);
+        items.add({
+          'id_product': pid,
+          'id': pid,
+          '_id': pid,
+          'nama_product': m['nama_product'] ?? m['nama'] ?? m['product_name'] ?? '',
+          'merek_product': m['merek_product'] ?? m['merek'] ?? m['brand'] ?? '',
+          'kategori': m['kategori'] ?? m['category'] ?? m['jenis'] ?? '',
+          'sku': m['sku'] ?? m['kode'] ?? '',
+          'harga': m['harga'] ?? m['harga_satuan'] ?? m['price'] ?? '',
+          // stok will be attached later
+          'raw': m,
+        });
+      }
+
+      // compute stock counts from product_barcodes
+      final Map<String, int> counts = {};
+      final futures = productIds.map((pid) async {
         try {
-          final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: pk).get();
-          counts[pk] = q.size;
+          final q2 = await firestore.collection('product_barcodes').where('productId', isEqualTo: pid).get();
+          counts[pid] = q2.size;
         } catch (e) {
-          counts[pk] = 0;
+          counts[pid] = 0;
         }
       }).toList();
       await Future.wait(futures);
 
-      // attach stock count to each product item
-      final enriched = data.map((item) {
-        final pk = (item['id_product'] ?? item['id'] ?? item['_id'] ?? '').toString();
-        final stock = counts[pk] ?? 0;
+      // attach stok and jumlah_produk
+      final enriched = items.map((item) {
+        final pid = (item['id_product'] ?? item['id'] ?? item['_id'] ?? '').toString();
+        final stock = counts[pid] ?? 0;
         final Map<String, dynamic> copy = Map<String, dynamic>.from(item);
         copy['stok'] = stock;
         copy['jumlah_produk'] = stock.toString();
@@ -76,7 +96,7 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
 
       setState(() => _products = enriched);
     } catch (e) {
-      debugPrint('Error loading products: $e');
+      debugPrint('Error loading products (Firestore): $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -86,9 +106,82 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _deleteStockRequest(String docId) async {
+    if (docId.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ID tidak valid')));
+      return;
+    }
+    try {
+      await FirebaseFirestore.instance.collection('stock_requests').doc(docId).delete();
+      await _loadStockHistory();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Permintaan stok dihapus')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menghapus: $e')));
+    }
+  }
+
+  Future<void> _showEditDialog(Map<String, dynamic> request) async {
+    final docId = request['_id']?.toString() ?? request['permintaan_id']?.toString() ?? '';
+    if (docId.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ID tidak valid')));
+      return;
+    }
+
+    String currentStatus = (request['status']?.toString() ?? 'Pending');
+    final noteCtrl = TextEditingController(text: request['catatan']?.toString() ?? '');
+    final statuses = ['Pending', 'diterima', 'ditolak'];
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        String selected = currentStatus;
+        return AlertDialog(
+          title: const Text('Edit Permintaan Stok'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: selected,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: statuses.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                  onChanged: (v) { if (v != null) selected = v; },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Catatan (opsional)', border: OutlineInputBorder()),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+            ElevatedButton(onPressed: () async {
+              try {
+                await FirebaseFirestore.instance.collection('stock_requests').doc(docId).update({
+                  'status': selected,
+                  'catatan': noteCtrl.text,
+                  'updated_at': DateTime.now().toIso8601String(),
+                });
+                Navigator.pop(ctx, true);
+              } catch (e) {
+                Navigator.pop(ctx, false);
+              }
+            }, child: const Text('Simpan')),
+          ],
+        );
       }
+    );
+
+    if (result == true) {
+      await _loadStockHistory();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Permintaan diperbarui')));
     }
   }
 
@@ -97,27 +190,105 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final user = auth.currentUser;
       final ownerId = user?.ownerId ?? user?.id ?? '';
-      
-      dynamic res;
+
+      final firestore = FirebaseFirestore.instance;
+      Query<Map<String, dynamic>> q = firestore.collection('stock_requests').orderBy('created_at', descending: true);
       if (ownerId.isNotEmpty) {
-        res = await _api.selectWhere(token, project, 'stock_requests', appid, 'ownerid', ownerId);
-      } else {
-        res = await _api.selectAll(token, project, 'stock_requests', appid);
+        final q1 = firestore.collection('stock_requests').where('ownerid', isEqualTo: ownerId).orderBy('created_at', descending: true);
+        final snap1 = await q1.limit(1).get();
+        if (snap1.docs.isNotEmpty) {
+          q = q1;
+        } else {
+          final q2 = firestore.collection('stock_requests').where('ownerId', isEqualTo: ownerId).orderBy('created_at', descending: true);
+          final snap2 = await q2.limit(1).get();
+          if (snap2.docs.isNotEmpty) q = q2;
+        }
       }
 
-      final jsonRes = res is String ? json.decode(res) : res;
-      final data = List<Map<String, dynamic>>.from(
-        jsonRes is Map ? (jsonRes['data'] ?? []) : (jsonRes is List ? jsonRes : [])
-      );
-      
-      // Sort by date (newest first)
-      data.sort((a, b) {
-        final aDate = a['created_at'] ?? a['timestamp'] ?? '';
-        final bDate = b['created_at'] ?? b['timestamp'] ?? '';
-        return bDate.compareTo(aDate);
-      });
-      
-      setState(() => _stockHistory = data);
+      try {
+        final snap = await q.get();
+        final data = snap.docs.map((d) {
+          final m = d.data();
+          return {
+            '_id': d.id,
+            'permintaan_id': m['permintaan_id'] ?? m['_id'] ?? d.id,
+            'ownerid': m['ownerid'] ?? m['ownerId'] ?? '',
+            'supplier_id': m['supplier_id'] ?? m['supplierId'] ?? '',
+            'nama_perusahaan': m['nama_perusahaan'] ?? m['company_name'] ?? '',
+            'nama_agen': m['nama_agen'] ?? m['requested_by'] ?? m['requested_by'] ?? '',
+            'tanggal_permintaan': m['tanggal_permintaan'] ?? m['requested_at'] ?? m['created_at'] ?? '',
+            'status': m['status'] ?? 'Pending',
+            'staff_id': m['staff_id'] ?? m['requested_by_id'] ?? m['staffId'] ?? '',
+            'nama_staff': m['nama_staff'] ?? m['requested_by_name'] ?? '',
+            'catatan': m['catatan'] ?? m['note'] ?? m['notes'] ?? '',
+            'created_at': m['created_at'] ?? '',
+            'updated_at': m['updated_at'] ?? '',
+            'product_id': m['product_id'] ?? m['productId'] ?? '',
+            'product_name': m['product_name'] ?? m['product_name'] ?? '',
+            'qty': m['qty'] ?? m['quantity'] ?? '',
+          };
+        }).toList();
+
+        setState(() => _stockHistory = data);
+      } catch (err) {
+        // If Firestore requires a composite index, fall back to a simple query
+        // and perform client-side sorting. This avoids a crash and displays data.
+        debugPrint('Primary stock history query failed, attempting fallback: $err');
+        try {
+          QuerySnapshot<Map<String, dynamic>> snap;
+          if (ownerId.isNotEmpty) {
+            // try 'ownerid' then 'ownerId' without ordering
+            final q1 = firestore.collection('stock_requests').where('ownerid', isEqualTo: ownerId);
+            final s1 = await q1.limit(1).get();
+            if (s1.docs.isNotEmpty) {
+              snap = await firestore.collection('stock_requests').where('ownerid', isEqualTo: ownerId).get();
+            } else {
+              snap = await firestore.collection('stock_requests').where('ownerId', isEqualTo: ownerId).get();
+            }
+          } else {
+            snap = await firestore.collection('stock_requests').get();
+          }
+
+          // sort docs by created_at (ISO string) descending on client
+          final docs = snap.docs.toList();
+          docs.sort((a, b) {
+            final aCreated = (a.data()['created_at'] ?? '').toString();
+            final bCreated = (b.data()['created_at'] ?? '').toString();
+            return bCreated.compareTo(aCreated);
+          });
+
+          final data = docs.map((d) {
+            final m = d.data();
+            return {
+              '_id': d.id,
+              'permintaan_id': m['permintaan_id'] ?? m['_id'] ?? d.id,
+              'ownerid': m['ownerid'] ?? m['ownerId'] ?? '',
+              'supplier_id': m['supplier_id'] ?? m['supplierId'] ?? '',
+              'nama_perusahaan': m['nama_perusahaan'] ?? m['company_name'] ?? '',
+              'nama_agen': m['nama_agen'] ?? m['requested_by'] ?? m['requested_by'] ?? '',
+              'tanggal_permintaan': m['tanggal_permintaan'] ?? m['requested_at'] ?? m['created_at'] ?? '',
+              'status': m['status'] ?? 'Pending',
+              'staff_id': m['staff_id'] ?? m['requested_by_id'] ?? m['staffId'] ?? '',
+              'nama_staff': m['nama_staff'] ?? m['requested_by_name'] ?? '',
+              'catatan': m['catatan'] ?? m['note'] ?? m['notes'] ?? '',
+              'created_at': m['created_at'] ?? '',
+              'updated_at': m['updated_at'] ?? '',
+              'product_id': m['product_id'] ?? m['productId'] ?? '',
+              'product_name': m['product_name'] ?? m['product_name'] ?? '',
+              'qty': m['qty'] ?? m['quantity'] ?? '',
+            };
+          }).toList();
+
+          if (mounted) {
+            setState(() => _stockHistory = data);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Menampilkan riwayat menggunakan fallback (index mungkin belum dibuat)'),
+            ));
+          }
+        } catch (e2) {
+          debugPrint('Fallback query also failed: $e2');
+        }
+      }
     } catch (e) {
       debugPrint('Error loading stock history: $e');
     }
@@ -131,7 +302,6 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
     
     final currentStock = int.tryParse((product['stok'] ?? product['jumlah_produk'] ?? '0').toString()) ?? 0;
     
-    final qtyCtrl = TextEditingController(text: '10');
     final noteCtrl = TextEditingController();
     
     final result = await showDialog<Map<String, dynamic>?>(
@@ -150,15 +320,6 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text('Stok saat ini: $currentStock unit'),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: qtyCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Jumlah yang diminta',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: noteCtrl,
@@ -176,22 +337,14 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
               ],
             ),
           ),
-          actions: [
+            actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, null),
               child: const Text('Batal'),
             ),
             ElevatedButton(
               onPressed: () {
-                final qty = int.tryParse(qtyCtrl.text) ?? 0;
-                if (qty <= 0) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('Jumlah harus lebih dari 0'))
-                  );
-                  return;
-                }
                 Navigator.pop(ctx, {
-                  'qty': qty,
                   'note': noteCtrl.text,
                 });
               },
@@ -222,24 +375,73 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
       }
     }
 
-    final map = {
+    final firestore = FirebaseFirestore.instance;
+    final now = DateTime.now();
+    final createdAt = now.toIso8601String();
+
+    // determine supplier info from product.raw if available, otherwise fallback to user/owner
+    String supplierId = '';
+    String namaPerusahaan = '';
+    String namaAgen = requesterName ?? 'Unknown';
+    try {
+      final raw = (product['raw'] is Map) ? Map<String, dynamic>.from(product['raw']) : <String, dynamic>{};
+      supplierId = (raw['supplier'] ?? raw['supplier_id'] ?? raw['supplierId'] ?? raw['vendor'] ?? '').toString();
+      if (supplierId.isNotEmpty) {
+        final supDoc = await FirebaseFirestore.instance.collection('suppliers').doc(supplierId).get();
+        if (supDoc.exists) {
+          final sm = supDoc.data() ?? {};
+          namaPerusahaan = (sm['companyName'] ?? sm['nama_perusahaan'] ?? sm['company'] ?? sm['company_name'] ?? '').toString();
+          namaAgen = (sm['name'] ?? sm['nama'] ?? sm['supplier_name'] ?? sm['displayName'] ?? namaAgen).toString();
+        }
+      }
+
+      // fallback: if supplier not found, try to use owner's company or user displayName
+      if (namaPerusahaan.isEmpty && user != null) {
+        if (user.companyName != null && user.companyName!.isNotEmpty) {
+          namaPerusahaan = user.companyName!;
+        } else if ((user.ownerId ?? '').isNotEmpty) {
+          final ownerDoc = await FirebaseFirestore.instance.collection('users').doc(user.ownerId).get();
+          if (ownerDoc.exists) {
+            final om = ownerDoc.data();
+            if (om != null) {
+              namaPerusahaan = (om['companyName'] ?? om['company_name'] ?? om['nama_perusahaan'] ?? '').toString();
+            }
+          }
+        }
+      }
+
+      if (user != null && (namaAgen.isEmpty || namaAgen == 'Unknown')) {
+        if (user.displayName.isNotEmpty) namaAgen = user.displayName;
+        else if (user.username.isNotEmpty) namaAgen = user.username;
+      }
+    } catch (_) {}
+
+    final Map<String, dynamic> doc = {
       'ownerid': ownerId,
-      'product_id': productId,
+      'permintaan_id': '', // will update after doc created
+      'supplier_id': supplierId,
+      'nama_perusahaan': namaPerusahaan,
+      'nama_agen': namaAgen,
+      'tanggal_permintaan': createdAt,
+      'status': 'Pending',
+      'staff_id': user?.id ?? '',
+      'nama_staff': namaAgen,
+      'catatan': result['note'] ?? '',
+      'created_at': createdAt,
       'product_name': productName,
-      'qty': result['qty'].toString(),
-      'note': result['note'],
-      'status': 'pending',
-      'current_stock': currentStock.toString(),
-      'requested_at': DateTime.now().toIso8601String(),
-      'requested_by': requesterName ?? 'Unknown',
     };
 
     try {
-      await _api.insertOne(token, project, 'stock_requests', appid, map);
-      
+      final docRef = await firestore.collection('stock_requests').add(doc);
+      // set permintaan_id and updated_at
+      await docRef.update({
+        'permintaan_id': docRef.id,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
       // Refresh history
       await _loadStockHistory();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -249,7 +451,7 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
         );
       }
     } catch (e) {
-      debugPrint('Error requesting stock: $e');
+      debugPrint('Error requesting stock (Firestore): $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -320,31 +522,50 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
                               ),
                               title: Text(request['product_name']?.toString() ?? 'Unknown Product'),
                               subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      if (request['catatan'] != null && request['catatan'].toString().isNotEmpty)
+                                                        Text(
+                                                          'Catatan: ${request['catatan']}',
+                                                          style: const TextStyle(fontSize: 11),
+                                                        ),
+                                                      Text(
+                                                        'Diajukan: ${_formatDate((request['tanggal_permintaan'] ?? request['created_at'] ?? '').toString())}',
+                                                        style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                                      ),
+                                                      if (request['nama_agen'] != null && request['nama_agen'].toString().isNotEmpty)
+                                                        Text(
+                                                          'Oleh: ${request['nama_agen']}',
+                                                          style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                                        ),
+                                                    ],
+                                                  ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text('Jumlah: ${request['qty']} unit'),
-                                  if (request['note'] != null && request['note'].toString().isNotEmpty)
-                                    Text(
-                                      'Catatan: ${request['note']}',
-                                      style: const TextStyle(fontSize: 11),
+                                  Chip(
+                                    label: Text(
+                                      request['status']?.toString() ?? 'pending',
+                                      style: const TextStyle(color: Colors.white, fontSize: 10),
                                     ),
-                                  Text(
-                                    'Diajukan: ${_formatDate(request['requested_at']?.toString() ?? '')}',
-                                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                    backgroundColor: _getStatusColor(request['status']?.toString() ?? 'pending'),
                                   ),
-                                  if (request['requested_by'] != null)
-                                    Text(
-                                      'Oleh: ${request['requested_by']}',
-                                      style: const TextStyle(fontSize: 10, color: Colors.grey),
-                                    ),
+                                  const SizedBox(width: 8),
+                                  PopupMenuButton<String>(
+                                    onSelected: (v) async {
+                                      if (v == 'edit') {
+                                        await _showEditDialog(request);
+                                      } else if (v == 'delete') {
+                                        final id = request['_id']?.toString() ?? request['permintaan_id']?.toString() ?? '';
+                                        await _deleteStockRequest(id);
+                                      }
+                                    },
+                                    itemBuilder: (ctx) => [
+                                      const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                      const PopupMenuItem(value: 'delete', child: Text('Hapus')),
+                                    ],
+                                  ),
                                 ],
-                              ),
-                              trailing: Chip(
-                                label: Text(
-                                  request['status']?.toString() ?? 'pending',
-                                  style: const TextStyle(color: Colors.white, fontSize: 10),
-                                ),
-                                backgroundColor: _getStatusColor(request['status']?.toString() ?? 'pending'),
                               ),
                             ),
                           );
@@ -376,6 +597,10 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
         return Colors.red;
       case 'pending':
         return Colors.orange;
+      case 'diterima':
+        return Colors.green;
+      case 'ditolak':
+        return Colors.red;
       case 'dikirim':
       case 'diproses':
         return Colors.blue;
@@ -394,6 +619,10 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
         return Icons.cancel;
       case 'pending':
         return Icons.access_time;
+      case 'diterima':
+        return Icons.check_circle;
+      case 'ditolak':
+        return Icons.cancel;
       case 'dikirim':
         return Icons.local_shipping;
       case 'diproses':
