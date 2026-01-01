@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 class SupplierPage extends StatelessWidget {
   final List<Map<String, dynamic>> suppliers;
   final bool loading;
+  final TextEditingController? searchController;
+  final void Function(String)? onSearch;
   final VoidCallback onAdd;
   final VoidCallback? onRefresh;
   final void Function(int index) onView;
@@ -13,6 +15,8 @@ class SupplierPage extends StatelessWidget {
     super.key,
     required this.suppliers,
     required this.loading,
+    this.searchController,
+    this.onSearch,
     required this.onAdd,
     required this.onView,
     required this.onEdit,
@@ -25,11 +29,10 @@ class SupplierPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: _buildAppBar(context),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: onAdd,
         backgroundColor: Colors.blue[700],
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Tambah Supplier'),
+        child: const Icon(Icons.add_rounded),
       ),
       body: loading
           ? _buildLoadingState()
@@ -37,6 +40,31 @@ class SupplierPage extends StatelessWidget {
               ? _buildEmptyState(context)
               : Column(
                   children: [
+                    // Search field
+                    if (searchController != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                        child: TextField(
+                          controller: searchController,
+                          onChanged: onSearch,
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            hintText: 'Cari supplier, nama atau telepon...',
+                            suffixIcon: (searchController?.text.isNotEmpty ?? false)
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      searchController?.clear();
+                                      if (onSearch != null) onSearch!('');
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          ),
+                        ),
+                      ),
                     _buildCounterBadge(),
                     const SizedBox(height: 8),
                     Expanded(child: _buildSupplierList()),
