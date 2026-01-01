@@ -160,7 +160,7 @@ class AddProductScreen {
       'createdAt': FieldValue.serverTimestamp(),
       'ownerId': ownerId ?? '',
       // productKey groups by name, brand, category and productionDate — different production dates create new master
-      'productKey': '${nameController!.text.trim().toLowerCase()}_${merekController!.text.trim().toLowerCase()}_${selectedCategory.toLowerCase()}_${productionDate}',
+      'productKey': '${nameController!.text.trim().toLowerCase()}_${merekController!.text.trim().toLowerCase()}_${selectedCategory.toLowerCase()}_$productionDate',
     };
 
     try {
@@ -200,7 +200,7 @@ class AddProductScreen {
         ? productionDateController!.text.trim()
         : _formatCurrentDateTime();
     // productKey groups by name, brand, category and productionDate
-    final String productKey = '${nameController!.text.trim().toLowerCase()}_${merekController!.text.trim().toLowerCase()}_${selectedCategory.toLowerCase()}_${productionDate}';
+    final String productKey = '${nameController!.text.trim().toLowerCase()}_${merekController!.text.trim().toLowerCase()}_${selectedCategory.toLowerCase()}_$productionDate';
 
     try {
       // look up existing master by productKey

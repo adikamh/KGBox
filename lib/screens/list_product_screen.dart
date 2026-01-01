@@ -315,8 +315,9 @@ class ListProductScreen {
       'tanggal_beli': (() {
         final createdRaw = target['createdAt'] ?? target['created_at'] ?? product['createdAt'] ?? product['created_at'] ?? target['purchaseDate'];
         DateTime? dt;
-        if (createdRaw is Timestamp) dt = createdRaw.toDate();
-        else if (createdRaw is DateTime) dt = createdRaw;
+        if (createdRaw is Timestamp) {
+          dt = createdRaw.toDate();
+        } else if (createdRaw is DateTime) dt = createdRaw;
         else if (createdRaw is String && createdRaw.isNotEmpty) dt = DateTime.tryParse(createdRaw);
         if (dt != null) {
           final d = dt.day.toString().padLeft(2, '0');

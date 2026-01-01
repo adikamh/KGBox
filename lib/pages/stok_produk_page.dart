@@ -699,7 +699,7 @@ class _StokProdukPageState extends State<StokProdukPage> {
                   RadioListTile(
                     title: const Text('Stok (Tertinggi ke Terendah)'),
                     value: 'stok_desc',
-                    groupValue: '${_sortBy}_${_sortDescending}',
+                    groupValue: '${_sortBy}_$_sortDescending',
                     onChanged: (value) {
                       setState(() {
                         _sortBy = 'stok';
@@ -711,7 +711,7 @@ class _StokProdukPageState extends State<StokProdukPage> {
                   RadioListTile(
                     title: const Text('Stok (Terendah ke Tertinggi)'),
                     value: 'stok_asc',
-                    groupValue: '${_sortBy}_${_sortDescending}',
+                    groupValue: '${_sortBy}_$_sortDescending',
                     onChanged: (value) {
                       setState(() {
                         _sortBy = 'stok';
@@ -723,7 +723,7 @@ class _StokProdukPageState extends State<StokProdukPage> {
                   RadioListTile(
                     title: const Text('Nama A-Z'),
                     value: 'nama_asc',
-                    groupValue: '${_sortBy}_${_sortDescending}',
+                    groupValue: '${_sortBy}_$_sortDescending',
                     onChanged: (value) {
                       setState(() {
                         _sortBy = 'nama';
@@ -735,7 +735,7 @@ class _StokProdukPageState extends State<StokProdukPage> {
                   RadioListTile(
                     title: const Text('Nama Z-A'),
                     value: 'nama_desc',
-                    groupValue: '${_sortBy}_${_sortDescending}',
+                    groupValue: '${_sortBy}_$_sortDescending',
                     onChanged: (value) {
                       setState(() {
                         _sortBy = 'nama';

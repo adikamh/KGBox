@@ -74,7 +74,7 @@ class DataService {
          final String basePath = 'https://api.247go.app/v5/update_id/';
 
          // Helper to run a single attempt and return whether it succeeded
-             Future<bool> _attempt(Uri uri, {Map<String, String>? formBody, Map<String, dynamic>? jsonBody, String method = 'POST', Map<String, String>? headers}) async {
+             Future<bool> attempt(Uri uri, {Map<String, String>? formBody, Map<String, dynamic>? jsonBody, String method = 'POST', Map<String, String>? headers}) async {
             try {
                http.Response resp;
                if (method == 'POST') {
@@ -144,45 +144,45 @@ class DataService {
          // Variant list: try combinations in order of likely success
          final attempts = <Future<bool> Function()>[
             // 1) POST form to /update_id/{collection} with appid
-            () => _attempt(Uri.parse(basePath + collection), formBody: canonicalForm, method: 'POST'),
+            () => attempt(Uri.parse(basePath + collection), formBody: canonicalForm, method: 'POST'),
             // 2) POST JSON to /update_id/{collection} with appid
-            () => _attempt(Uri.parse(basePath + collection), jsonBody: canonicalJson, method: 'POST'),
+            () => attempt(Uri.parse(basePath + collection), jsonBody: canonicalJson, method: 'POST'),
             // 3) POST form to /update_id/{collection} without appid
             () {
                final form = Map<String, String>.from(canonicalForm);
                form.remove('appid');
-               return _attempt(Uri.parse(basePath + collection), formBody: form, method: 'POST');
+               return attempt(Uri.parse(basePath + collection), formBody: form, method: 'POST');
             },
             // 4) POST JSON to /update_id/{collection} without appid
             () {
                final j = Map<String, dynamic>.from(canonicalJson);
                j.remove('appid');
-               return _attempt(Uri.parse(basePath + collection), jsonBody: j, method: 'POST');
+               return attempt(Uri.parse(basePath + collection), jsonBody: j, method: 'POST');
             },
             // 5) POST form to /update_id (generic) with appid+collection in body
             () {
                final form = Map<String, String>.from(canonicalForm);
-               return _attempt(Uri.parse(basePath), formBody: form, method: 'POST');
+               return attempt(Uri.parse(basePath), formBody: form, method: 'POST');
             },
             // 6) POST JSON to /update_id (generic)
-            () => _attempt(Uri.parse(basePath), jsonBody: canonicalJson, method: 'POST'),
+            () => attempt(Uri.parse(basePath), jsonBody: canonicalJson, method: 'POST'),
             // 7) PUT form to /update_id/{collection} (some servers expect PUT)
-            () => _attempt(Uri.parse(basePath + collection), formBody: canonicalForm, method: 'PUT'),
+            () => attempt(Uri.parse(basePath + collection), formBody: canonicalForm, method: 'PUT'),
             // 8) PUT JSON to /update_id/{collection}
-            () => _attempt(Uri.parse(basePath + collection), jsonBody: canonicalJson, method: 'PUT'),
+            () => attempt(Uri.parse(basePath + collection), jsonBody: canonicalJson, method: 'PUT'),
             // 9) Try POST form but use id field name '_id' instead of 'id'
             () {
                final f = Map<String, String>.from(canonicalForm);
                f['_id'] = f['id']!;
                f.remove('id');
-               return _attempt(Uri.parse(basePath + collection), formBody: f, method: 'POST');
+               return attempt(Uri.parse(basePath + collection), formBody: f, method: 'POST');
             },
             // 10) Try POST json with id field name '_id'
             () {
                final j = Map<String, dynamic>.from(canonicalJson);
                j['_id'] = j['id'];
                j.remove('id');
-               return _attempt(Uri.parse(basePath + collection), jsonBody: j, method: 'POST');
+               return attempt(Uri.parse(basePath + collection), jsonBody: j, method: 'POST');
             },
          ];
 
@@ -228,7 +228,7 @@ class DataService {
          print('  updateId status: ${response.statusCode}');
          print('  updateId body: ${response.body}');
 
-         bool _respIndicatesSuccess(http.Response resp) {
+         bool respIndicatesSuccess(http.Response resp) {
             if (resp.statusCode != 200) return false;
             try {
                final parsed = jsonDecode(resp.body);
@@ -243,7 +243,7 @@ class DataService {
             return false;
          }
 
-         if (_respIndicatesSuccess(response)) return true;
+         if (respIndicatesSuccess(response)) return true;
 
              // If form request failed or returned error, try a set of variants automatically
              try {
@@ -254,7 +254,7 @@ class DataService {
                       final jsonResp = await http.post(Uri.parse(uri), headers: {'Content-Type': 'application/json'}, body: jsonEncode(jsonBody)).timeout(const Duration(seconds: 15));
                       print('  updateId JSON retry status: ${jsonResp.statusCode}');
                       print('  updateId JSON retry body: ${jsonResp.body}');
-                      return _respIndicatesSuccess(jsonResp);
+                      return respIndicatesSuccess(jsonResp);
                    },
                    // Form without appid
                    () async {
@@ -262,7 +262,7 @@ class DataService {
                       f.remove('appid');
                       final r = await http.post(Uri.parse(uri), body: f).timeout(const Duration(seconds: 15));
                       print('  updateId form-no-appid status: ${r.statusCode} body: ${r.body}');
-                      return _respIndicatesSuccess(r);
+                      return respIndicatesSuccess(r);
                    },
                    // JSON without appid
                    () async {
@@ -270,14 +270,14 @@ class DataService {
                       f.remove('appid');
                       final jr = await http.post(Uri.parse(uri), headers: {'Content-Type': 'application/json'}, body: jsonEncode(f)).timeout(const Duration(seconds: 15));
                       print('  updateId json-no-appid status: ${jr.statusCode} body: ${jr.body}');
-                      return _respIndicatesSuccess(jr);
+                      return respIndicatesSuccess(jr);
                    },
                    // Try generic endpoint without collection in path
                    () async {
                       final genericUri = Uri.parse('https://api.247go.app/v5/update_id');
                       final r = await http.post(genericUri, body: body).timeout(const Duration(seconds: 15));
                       print('  updateId generic POST status: ${r.statusCode} body: ${r.body}');
-                      return _respIndicatesSuccess(r);
+                      return respIndicatesSuccess(r);
                    },
                    // Try using _id instead of id
                    () async {
@@ -286,7 +286,7 @@ class DataService {
                       f.remove('id');
                       final r = await http.post(Uri.parse(uri), body: f).timeout(const Duration(seconds: 15));
                       print('  updateId _id variant status: ${r.statusCode} body: ${r.body}');
-                      return _respIndicatesSuccess(r);
+                      return respIndicatesSuccess(r);
                    }
                 ];
 
@@ -789,7 +789,7 @@ class DataService {
 
          try {
              // Try several variants and log responses to discover server expectation
-             Future<bool> _tryVariant(Map<String, dynamic> body, {Map<String, String>? headers, String method = 'PUT', String? urlOverride}) async {
+             Future<bool> tryVariant(Map<String, dynamic> body, {Map<String, String>? headers, String method = 'PUT', String? urlOverride}) async {
                 final target = Uri.parse(urlOverride ?? uri);
                 try {
                    http.Response resp;
@@ -856,26 +856,26 @@ class DataService {
              };
 
              // Try PUT form with CSV
-             if (await _tryVariant(baseBody, method: 'PUT')) return true;
+             if (await tryVariant(baseBody, method: 'PUT')) return true;
 
              // Try PUT JSON with win_value as JSON array
              final bodyJsonArray = Map<String, dynamic>.from(baseBody);
              bodyJsonArray['win_value'] = jsonArray;
-             if (await _tryVariant(bodyJsonArray, headers: {'Content-Type': 'application/json'}, method: 'PUT')) return true;
+             if (await tryVariant(bodyJsonArray, headers: {'Content-Type': 'application/json'}, method: 'PUT')) return true;
 
              // Try POST form (some servers expect POST)
-             if (await _tryVariant(baseBody, method: 'POST')) return true;
+             if (await tryVariant(baseBody, method: 'POST')) return true;
 
              // Try POST JSON
-             if (await _tryVariant(bodyJsonArray, headers: {'Content-Type': 'application/json'}, method: 'POST')) return true;
+             if (await tryVariant(bodyJsonArray, headers: {'Content-Type': 'application/json'}, method: 'POST')) return true;
 
              // Try without appid
              final withoutAppid = Map<String, dynamic>.from(baseBody);
              withoutAppid.remove('appid');
-             if (await _tryVariant(withoutAppid, method: 'PUT')) return true;
+             if (await tryVariant(withoutAppid, method: 'PUT')) return true;
 
              // Try generic endpoint without trailing slash
-             if (await _tryVariant(baseBody, method: 'PUT', urlOverride: 'https://api.247go.app/v5/update_where_in')) return true;
+             if (await tryVariant(baseBody, method: 'PUT', urlOverride: 'https://api.247go.app/v5/update_where_in')) return true;
 
              return false;
          } catch (e) {

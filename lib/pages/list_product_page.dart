@@ -667,7 +667,9 @@ class _ListProductPageState extends State<ListProductPage> {
         return;
       }
       if (node is List) {
-        for (final e in node) collectIds(e);
+        for (final e in node) {
+          collectIds(e);
+        }
       }
     }
 
@@ -724,7 +726,9 @@ class _ListProductPageState extends State<ListProductPage> {
                                 if (val == true) {
                                   selectedSet.addAll(filtered);
                                 } else {
-                                  for (final f in filtered) selectedSet.remove(f);
+                                  for (final f in filtered) {
+                                    selectedSet.remove(f);
+                                  }
                                 }
                               });
                             },
@@ -735,7 +739,9 @@ class _ListProductPageState extends State<ListProductPage> {
                             onPressed: () {
                               setState2(() {
                                 if (allSelected) {
-                                  for (final f in filtered) selectedSet.remove(f);
+                                  for (final f in filtered) {
+                                    selectedSet.remove(f);
+                                  }
                                 } else {
                                   selectedSet.addAll(filtered);
                                 }
@@ -762,7 +768,11 @@ class _ListProductPageState extends State<ListProductPage> {
                                   controlAffinity: ListTileControlAffinity.leading,
                                   onChanged: (val) {
                                     setState2(() {
-                                      if (val == true) selectedSet.add(v); else selectedSet.remove(v);
+                                      if (val == true) {
+                                        selectedSet.add(v);
+                                      } else {
+                                        selectedSet.remove(v);
+                                      }
                                     });
                                   },
                                 );

@@ -16,8 +16,8 @@ class BestSellerPage extends StatefulWidget {
 
 class _BestSellerPageState extends State<BestSellerPage> {
   String _query = '';
-  String _sortBy = 'terjual';
-  bool _descending = true;
+  final String _sortBy = 'terjual';
+  final bool _descending = true;
 
   @override
   Widget build(BuildContext context) {

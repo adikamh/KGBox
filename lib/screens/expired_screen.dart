@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
 import '../pages/expired_page.dart';
+import '../providers/auth_provider.dart';
 
 class ExpiredScreen extends StatefulWidget {
   const ExpiredScreen({super.key});
@@ -25,29 +28,97 @@ class _ExpiredScreenState extends State<ExpiredScreen> {
   Future<void> _loadExpired() async {
     setState(() => _loading = true);
     try {
-      // Ambil semua produk
-      final res = await _api.selectAll(token, project, 'product', appid);
-      final jsonRes = res is String ? json.decode(res) : res;
-      final data = List<Map<String, dynamic>>.from(jsonRes['data'] ?? []);
+      // Prefer Firestore as source of truth. If unavailable, fallback to REST API.
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser;
+      final ownerId = user?.ownerId ?? user?.id ?? '';
 
       final now = DateTime.now();
       // Ambil produk yang kadaluarsa dalam 2 bulan ke depan
       final threshold = DateTime(now.year, now.month + 2, now.day);
 
       final List<Map<String, dynamic>> expired = [];
-      for (final p in data) {
-        final raw = p['tanggal_expired']?.toString() ?? 
-                   p['tanggal_expire']?.toString() ?? 
-                   p['expired_date']?.toString() ?? 
-                   p['expired_at']?.toString() ?? '';
-        
-        if (raw.isNotEmpty) {
+
+      try {
+        final firestore = FirebaseFirestore.instance;
+        // products collection (plural) is used elsewhere in the app
+        final coll = firestore.collection('products');
+
+        // If ownerId is provided, try common owner field names ('ownerId' then 'ownerid')
+        QuerySnapshot snap;
+        if (ownerId.isNotEmpty) {
+          snap = await coll.where('ownerId', isEqualTo: ownerId).get();
+          if (snap.docs.isEmpty) {
+            snap = await coll.where('ownerid', isEqualTo: ownerId).get();
+          }
+        } else {
+          snap = await coll.get();
+        }
+
+        // fetch docs and parse expiry fields (support Timestamp/int/string)
+        // 'snap' now holds the result set
+        for (final doc in snap.docs) {
+          try {
+            final data = doc.data() as Map<String, dynamic>? ?? {};
+            // prefer the app's `expiredDate` field, but support other common names and types
+            dynamic raw = data['expiredDate'] ?? data['tanggal_expired'] ?? data['tanggal_expire'] ?? data['expired_at'] ?? data['expired_date'];
+            if (raw == null) continue;
+
+            DateTime? dt;
+            if (raw is Timestamp) {
+              dt = raw.toDate();
+            } else if (raw is int) {
+              // try milliseconds vs seconds
+              if (raw > 9999999999) {
+                dt = DateTime.fromMillisecondsSinceEpoch(raw);
+              } else {
+                dt = DateTime.fromMillisecondsSinceEpoch(raw * 1000);
+              }
+            } else if (raw is String) {
+              try {
+                dt = DateTime.parse(raw);
+              } catch (_) {
+                // try simple yyyy-MM-dd
+                final parts = raw.split('-');
+                if (parts.length >= 3) {
+                  final y = int.tryParse(parts[0]) ?? 0;
+                  final m = int.tryParse(parts[1]) ?? 1;
+                  final d = int.tryParse(parts[2].split(' ').first) ?? 1;
+                  if (y > 0) dt = DateTime(y, m, d);
+                }
+              }
+            }
+
+            if (dt != null && dt.isBefore(threshold)) {
+              expired.add({
+                'full': data,
+                'expired_at': dt.toIso8601String(),
+                'product_id': (data['id_product'] ?? data['id'] ?? doc.id).toString(),
+                'stock': int.tryParse((data['stok'] ?? data['stock'] ?? 0).toString()) ?? 0,
+              });
+            }
+          } catch (e) {
+            // ignore problematic doc
+          }
+        }
+      } catch (e) {
+        // Firestore failed — fallback to REST API as previously implemented
+        debugPrint('Firestore expired fetch failed, falling back to REST: $e');
+        final res = await _api.selectAll(token, project, 'product', appid);
+        final jsonRes = res is String ? json.decode(res) : res;
+        final data = List<Map<String, dynamic>>.from(jsonRes['data'] ?? []);
+
+        for (final p in data) {
+          final raw = p['tanggal_expired']?.toString() ?? 
+                     p['tanggal_expire']?.toString() ?? 
+                     p['expired_date']?.toString() ?? 
+                     p['expired_at']?.toString() ?? '';
+          if (raw.isEmpty) continue;
           try {
             final dt = DateTime.parse(raw);
-            // Tampilkan produk yang sudah lewat atau akan lewat dalam 2 bulan
             if (dt.isBefore(threshold)) {
               expired.add({
-                'full': p, 
+                'full': p,
                 'expired_at': dt.toIso8601String(),
                 'product_id': p['id_product'] ?? p['id'] ?? '',
                 'stock': p['stok'] ?? p['stock'] ?? 0,

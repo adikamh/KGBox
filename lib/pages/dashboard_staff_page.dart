@@ -17,7 +17,7 @@ class DashboardStaffPage extends StatefulWidget {
 
 class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBindingObserver {
   final DashboardStaffScreen _controller = DashboardStaffScreen();
-  int _selectedBottomIndex = 0;
+  final int _selectedBottomIndex = 0;
   Timer? _refreshTimer;
   bool _isRefreshing = false;
   late DateTime _lastAppResumeTime;
@@ -27,6 +27,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeData();
+    _controller.addListener(_onControllerUpdated);
     _startAutoRefreshTimer();
     _lastAppResumeTime = DateTime.now();
   }
@@ -34,8 +35,14 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _controller.removeListener(_onControllerUpdated);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _onControllerUpdated() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
@@ -151,9 +158,36 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
             onPressed: () => _refreshData(),
             tooltip: 'Refresh',
           ),
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined),
-          onPressed: () => _controller.navigateToNotifications(context),
+        Stack(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined),
+              onPressed: () => _controller.navigateToNotifications(context),
+            ),
+            if (_controller.expiredCount > 0)
+              Positioned(
+                right: 6,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                  child: Center(
+                    child: Text(
+                      '${_controller.expiredCount}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
         PopupMenuButton(
           icon: const Icon(Icons.exit_to_app),

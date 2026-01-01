@@ -32,7 +32,7 @@ class SupplierPage extends StatelessWidget {
       floatingActionButton: FloatingActionButton(
         onPressed: onAdd,
         backgroundColor: Colors.blue[700],
-        child: const Icon(Icons.add_rounded),
+        child: const Icon(Icons.add_rounded, color: Colors.white),
       ),
       body: loading
           ? _buildLoadingState()

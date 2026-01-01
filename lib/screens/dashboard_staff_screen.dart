@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:kgbox/screens/notifications_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/auth_provider.dart';
@@ -12,7 +13,7 @@ import '../screens/logout_screen.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
 
-class DashboardStaffScreen {
+class DashboardStaffScreen extends ChangeNotifier {
   // Data management
   final List<Map<String, dynamic>> _todaysOut = [];
   final DataService _api = DataService();
@@ -49,7 +50,7 @@ class DashboardStaffScreen {
       // ignore: unused_local_variable
       dynamic ordersRes;
       if (ownerId.isNotEmpty) {
-        ordersRes = await _api.selectWhereLike(token, project, 'order', appid, 'tanggal_order', todayKey + '%');
+        ordersRes = await _api.selectWhereLike(token, project, 'order', appid, 'tanggal_order', '$todayKey%');
         // Note: selectWhereLike doesn't support owner filter, so retrieve orders by owner and then filter by date below
         final ownerOrdersRes = await _api.selectWhere(token, project, 'order', appid, 'ownerid', ownerId);
         final ownerOrders = _parseSelectResponse(ownerOrdersRes);
@@ -87,6 +88,7 @@ class DashboardStaffScreen {
 
         pengirimanCount = orders.length;
         _lastFetchTime = DateTime.now();
+        notifyListeners();
         return;
       } else {
         // Query orders hari ini
@@ -120,7 +122,9 @@ class DashboardStaffScreen {
 
         pengirimanCount = orders.length;
         _lastFetchTime = DateTime.now();
-        return;
+        notifyListeners();
+                _lastFetchTime = DateTime.now();
+                notifyListeners();
       }
       
     } catch (e) {
@@ -133,32 +137,116 @@ class DashboardStaffScreen {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final user = auth.currentUser;
       final ownerId = user?.ownerId ?? user?.id ?? '';
-
-      // Fetch products untuk low stock dan expired (filter by owner if available)
-      dynamic prodRes;
-      if (ownerId.isNotEmpty) {
-        prodRes = await _api.selectWhere(token, project, 'product', appid, 'ownerid', ownerId);
-      } else {
-        prodRes = await _api.selectAll(token, project, 'product', appid);
-      }
-      final List<dynamic> prods = _parseSelectResponse(prodRes);
-      
+      // Prefer Firestore for expired count (more reliable). Fall back to REST if Firestore unavailable.
       lowStockCount = 0;
       expiredCount = 0;
       final now = DateTime.now();
-      
-      for (final p in prods) {
-        // Check low stock
-        final stok = int.tryParse(p['jumlah_produk']?.toString() ?? p['stok']?.toString() ?? '0') ?? 0;
-        if (stok <= 10) lowStockCount++;
-        
-        // Check expired
-        final rawExpired = p['tanggal_expired']?.toString() ?? p['tanggal_expire']?.toString() ?? '';
-        if (rawExpired.isNotEmpty) {
+
+      try {
+        final firestore = FirebaseFirestore.instance;
+
+        QuerySnapshot<Map<String, dynamic>> snap;
+        if (ownerId.isNotEmpty) {
+          // Try both common owner field variants and use whichever returns docs
+          final qLower = await firestore.collection('products').where('ownerid', isEqualTo: ownerId).get();
+          if (qLower.docs.isNotEmpty) {
+            snap = qLower;
+          } else {
+            snap = await firestore.collection('products').where('ownerId', isEqualTo: ownerId).get();
+          }
+        } else {
+          snap = await firestore.collection('products').get();
+        }
+
+        int fsExpired = 0;
+        for (final doc in snap.docs) {
+          final dataObj = doc.data();
+          // lowStock: try common fields
           try {
-            final expDate = DateTime.parse(rawExpired);
-            if (expDate.isBefore(now)) expiredCount++;
+            final stokVal = dataObj['jumlah_produk'] ?? dataObj['stok'] ?? dataObj['stock'];
+            final stok = int.tryParse(stokVal?.toString() ?? '0') ?? 0;
+            if (stok <= 10) lowStockCount++;
           } catch (_) {}
+
+          // parse possible expiry fields
+          DateTime? expDate;
+          final candidates = ['tanggal_expired', 'tanggal_expire', 'expiredDate', 'expired_at', 'expired_date', 'expired'];
+          for (final f in candidates) {
+            if (dataObj.containsKey(f) && expDate == null) {
+              final raw = dataObj[f];
+              if (raw is Timestamp) {
+                expDate = raw.toDate();
+              } else if (raw is int) {
+                // handle seconds or milliseconds
+                if (raw > 1000000000000) {
+                  expDate = DateTime.fromMillisecondsSinceEpoch(raw);
+                } else {
+                  expDate = DateTime.fromMillisecondsSinceEpoch(raw * 1000);
+                }
+              } else if (raw is String) {
+                try {
+                  expDate = DateTime.parse(raw);
+                } catch (_) {
+                  // try yyyy-MM-dd fallback
+                  try {
+                    expDate = DateTime.parse(raw.replaceAll('/', '-'));
+                  } catch (_) {}
+                }
+              }
+            }
+          }
+
+          if (expDate != null && expDate.isBefore(now)) fsExpired++;
+        }
+
+        expiredCount = fsExpired;
+          // Create or update a summary notification for expired products for this owner
+          try {
+            if (ownerId.isNotEmpty) {
+              final notifRef = FirebaseFirestore.instance.collection('notifications').doc('expired_summary_$ownerId');
+              if (expiredCount > 0) {
+                final title = expiredCount == 1 ? 'Produk kedaluwarsa' : 'Produk kedaluwarsa: $expiredCount';
+                final body = expiredCount == 1
+                    ? 'Ada 1 produk yang telah kedaluwarsa. Periksa daftar Produk Kedaluwarsa.'
+                    : 'Ada $expiredCount produk yang telah kedaluwarsa. Periksa daftar Produk Kedaluwarsa.';
+                await notifRef.set({
+                  'ownerid': ownerId,
+                  'type': 'expired_summary',
+                  'title': title,
+                  'body': body,
+                  'timestamp': FieldValue.serverTimestamp(),
+                }, SetOptions(merge: true));
+              } else {
+                // remove previous summary notification if none expired
+                await notifRef.delete().catchError((_) {});
+              }
+            }
+          } catch (_) {}
+      } catch (e) {
+        // Firestore attempt failed; fall back to REST parsing of 'product' table
+        dynamic prodRes;
+        if (ownerId.isNotEmpty) {
+          prodRes = await _api.selectWhere(token, project, 'product', appid, 'ownerid', ownerId);
+        } else {
+          prodRes = await _api.selectAll(token, project, 'product', appid);
+        }
+        final List<dynamic> prods = _parseSelectResponse(prodRes);
+
+        lowStockCount = 0;
+        expiredCount = 0;
+        for (final p in prods) {
+          // Check low stock
+          final stok = int.tryParse(p['jumlah_produk']?.toString() ?? p['stok']?.toString() ?? '0') ?? 0;
+          if (stok <= 10) lowStockCount++;
+          
+          // Check expired
+          final rawExpired = p['tanggal_expired']?.toString() ?? p['tanggal_expire']?.toString() ?? '';
+          if (rawExpired.isNotEmpty) {
+            try {
+              final expDate = DateTime.parse(rawExpired);
+              if (expDate.isBefore(now)) expiredCount++;
+            } catch (_) {}
+          }
         }
       }
 
@@ -202,6 +290,7 @@ class DashboardStaffScreen {
       bestSellerCount = sortedProducts.take(10).length;
       
       _lastFetchTime = DateTime.now();
+      notifyListeners();
       
     } catch (e) {
       debugPrint('fetchMetrics error: $e');
@@ -329,12 +418,7 @@ class DashboardStaffScreen {
   void navigateToNotifications(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          appBar: AppBar(title: const Text('Notifications')),
-          body: const Center(child: Text('No notifications')),
-        ),
-      ),
+      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
     );
   }
 

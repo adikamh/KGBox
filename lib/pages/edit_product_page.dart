@@ -632,8 +632,11 @@ class _EditProductPageState extends State<EditProductPage> {
         _selectedSupplierId = chosen['id']?.toString();
         _controllers['supplier_name']?.text = chosen['company'] ?? '';
         final sid = _selectedSupplierId ?? '';
-        if (!_controllers.containsKey('supplier_id')) _controllers['supplier_id'] = TextEditingController(text: sid);
-        else _controllers['supplier_id']?.text = sid;
+        if (!_controllers.containsKey('supplier_id')) {
+          _controllers['supplier_id'] = TextEditingController(text: sid);
+        } else {
+          _controllers['supplier_id']?.text = sid;
+        }
       });
     }
   }
