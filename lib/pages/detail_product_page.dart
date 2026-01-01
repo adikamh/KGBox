@@ -213,7 +213,7 @@ class _DetailProductPageState extends State<DetailProductPage> {
                                   },
                                 ),
                               );
-                            }).toList(),
+                            }),
                           ],
                         ),
                       ),
@@ -835,7 +835,9 @@ class _DetailProductPageState extends State<DetailProductPage> {
                                               if (val == true) {
                                                 selectedSet.addAll(filtered);
                                               } else {
-                                                for (final f in filtered) selectedSet.remove(f);
+                                                for (final f in filtered) {
+                                                  selectedSet.remove(f);
+                                                }
                                               }
                                             });
                                           },
@@ -846,7 +848,9 @@ class _DetailProductPageState extends State<DetailProductPage> {
                                           onPressed: () {
                                             setState2(() {
                                               if (allSelected) {
-                                                for (final f in filtered) selectedSet.remove(f);
+                                                for (final f in filtered) {
+                                                  selectedSet.remove(f);
+                                                }
                                               } else {
                                                 selectedSet.addAll(filtered);
                                               }
@@ -873,7 +877,11 @@ class _DetailProductPageState extends State<DetailProductPage> {
                                                 controlAffinity: ListTileControlAffinity.leading,
                                                 onChanged: (val) {
                                                   setState2(() {
-                                                    if (val == true) selectedSet.add(v); else selectedSet.remove(v);
+                                                    if (val == true) {
+                                                      selectedSet.add(v);
+                                                    } else {
+                                                      selectedSet.remove(v);
+                                                    }
                                                   });
                                                 },
                                               );

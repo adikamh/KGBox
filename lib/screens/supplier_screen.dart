@@ -90,14 +90,14 @@ class _SupplierScreenState extends State<SupplierScreen> {
         final company = TextEditingController();
         final phone = TextEditingController();
         final alamat = TextEditingController();
-        final _formKey = GlobalKey<FormState>();
+        final formKey = GlobalKey<FormState>();
         return Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Form(
-                key: _formKey,
+                key: formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,7 +115,13 @@ class _SupplierScreenState extends State<SupplierScreen> {
                           child: const Icon(Icons.business_rounded, color: Colors.white),
                         ),
                         const SizedBox(width: 16),
-                        const Text('Tambah Supplier Baru', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            'Tambah Supplier',
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                     const Divider(height: 24),
@@ -175,20 +181,27 @@ class _SupplierScreenState extends State<SupplierScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: OutlinedButton(
+                          child: ElevatedButton.icon(
                             onPressed: () => Navigator.pop(ctx, null),
-                            style: OutlinedButton.styleFrom(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue[700],
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
-                            child: const Text('Batal'),
+                            icon: const Icon(Icons.close_rounded, color: Colors.white),
+                            label:  const Text('Batal', style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
+                        
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: () {
-                              if (_formKey.currentState?.validate() ?? true) {
+                              if (formKey.currentState?.validate() ?? true) {
                                 Navigator.pop(ctx, {
                                   'company': company.text,
                                   'name': name.text,
@@ -202,8 +215,11 @@ class _SupplierScreenState extends State<SupplierScreen> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
-                            icon: const Icon(Icons.check_rounded),
-                            label: const Text('Simpan'),
+                            icon: const Icon(Icons.check_rounded, color: Colors.white),
+                            label: const Text('Simpan', style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,),
+                            ),
                           ),
                         ),
                       ],
@@ -261,7 +277,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
   }
 
   void _viewSupplier(int index) {
-    final supplier = (_filteredSuppliers != null && _filteredSuppliers.length > 0) ? _filteredSuppliers[index] : _suppliers[index];
+    final supplier = (_filteredSuppliers.isNotEmpty) ? _filteredSuppliers[index] : _suppliers[index];
     final raw = supplier['_raw'] as Map<String, dynamic>? ?? {};
     
     showDialog(
@@ -433,7 +449,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
     final name = TextEditingController(text: item['name'] ?? '');
     final phone = TextEditingController(text: item['phone'] ?? '');
     final alamat = TextEditingController(text: item['alamat'] ?? '');
-    final _formKey = GlobalKey<FormState>();
+    final formKey = GlobalKey<FormState>();
 
     final Map<String, String>? result = await showDialog<Map<String, String>>(
       context: context,
@@ -444,7 +460,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Form(
-                key: _formKey,
+                key: formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -462,7 +478,13 @@ class _SupplierScreenState extends State<SupplierScreen> {
                           child: const Icon(Icons.edit_rounded, color: Colors.white),
                         ),
                         const SizedBox(width: 16),
-                        const Text('Edit Supplier', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            'Edit Supplier',
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                     const Divider(height: 24),
@@ -541,7 +563,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: () {
-                              if (_formKey.currentState?.validate() ?? true) {
+                              if (formKey.currentState?.validate() ?? true) {
                                 Navigator.pop(ctx, {
                                   'company': company.text,
                                   'name': name.text,
@@ -722,7 +744,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
   @override
   Widget build(BuildContext context) {
     return SupplierPage(
-      suppliers: (_filteredSuppliers != null && _filteredSuppliers.length > 0) ? _filteredSuppliers : _suppliers,
+      suppliers: (_filteredSuppliers.isNotEmpty) ? _filteredSuppliers : _suppliers,
       loading: _loading,
       searchController: _searchController,
       onSearch: (s) => _onSearchChanged(),

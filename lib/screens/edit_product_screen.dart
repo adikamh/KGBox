@@ -147,8 +147,9 @@ class EditProductScreen {
     if (merek.isEmpty) errors['merek_product'] = 'Merek harus diisi';
 
     final hargaText = controllers['harga_product']?.text.trim() ?? '';
-    if (hargaText.isEmpty) errors['harga_product'] = 'Harga harus diisi';
-    else {
+    if (hargaText.isEmpty) {
+      errors['harga_product'] = 'Harga harus diisi';
+    } else {
       final clean = formatPriceForStorage(hargaText);
       final harga = int.tryParse(clean);
       if (harga == null || harga <= 0) errors['harga_product'] = 'Harga harus berupa angka positif';
@@ -335,7 +336,7 @@ class EditProductScreen {
           final String keyName = updated.nama_product.trim().toLowerCase();
           final String keyBrand = updated.merek_product.trim().toLowerCase();
           final String keyCat = updated.kategori_product.trim().toLowerCase();
-          final String productKey = '${keyName}_${keyBrand}_${keyCat}_${prodForKey}';
+          final String productKey = '${keyName}_${keyBrand}_${keyCat}_$prodForKey';
           updateData['productKey'] = productKey;
 
       // Perform Firestore update

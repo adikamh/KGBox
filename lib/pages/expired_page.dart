@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ExpiredPage extends StatefulWidget {
   final List<Map<String, dynamic>> items;
@@ -822,7 +823,7 @@ class _ExpiredPageState extends State<ExpiredPage> {
                     title: const Text('Tampilkan yang kritis saja'),
                     subtitle: const Text('≤ 7 hari atau sudah lewat'),
                     value: _showCriticalOnly,
-                    activeColor: Colors.red[700],
+                    activeThumbColor: Colors.red[700],
                     onChanged: (value) {
                       setStateSB(() => _showCriticalOnly = value);
                       setState(() => _showCriticalOnly = value);
@@ -999,23 +1000,12 @@ class _ExpiredPageState extends State<ExpiredPage> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () {},
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.blue[700],
-                        side: BorderSide(color: Colors.blue[200]!),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      icon: const Icon(Icons.edit_rounded, size: 18),
-                      label: const Text('Ubah', style: TextStyle(fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {},
+                      onPressed: () {
+                        // Simple reminder action (placeholder)
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Pengingat dikirim.')),
+                        );
+                      },
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.orange[700],
                         side: BorderSide(color: Colors.orange[200]!),
@@ -1029,17 +1019,61 @@ class _ExpiredPageState extends State<ExpiredPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red[700],
-                      side: BorderSide(color: Colors.red[200]!),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        final productId = (item['product_id'] ?? (item['full'] is Map ? (item['full']['id_product'] ?? item['full']['id']) : null) ?? '').toString();
+                        if (productId.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ID produk tidak tersedia')));
+                          return;
+                        }
+
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Konfirmasi Hapus'),
+                            content: const Text('Hapus master produk ini dari database? Tindakan ini tidak dapat dibatalkan.'),
+                            actions: [
+                              ElevatedButton(onPressed: () => Navigator.pop(ctx, false), style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]), child: const Text('Batal', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),)),
+                              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]), child: const Text('Hapus', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),)),
+                            ],
+                          ),
+                        );
+
+                        if (confirm != true) return;
+
+                        try {
+                          final firestore = FirebaseFirestore.instance;
+                          // delete master product
+                          await firestore.collection('products').doc(productId).delete();
+                          // delete associated barcodes (if any)
+                          try {
+                            final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: productId).get();
+                            for (final d in q.docs) {
+                              await firestore.collection('product_barcodes').doc(d.id).delete();
+                            }
+                          } catch (_) {}
+
+                          // remove from local list to update UI
+                          setState(() {
+                            widget.items.removeWhere((e) => (e['product_id'] ?? '').toString() == productId);
+                          });
+
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Produk dihapus')));
+                          Navigator.pop(context);
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menghapus: $e')));
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[700],
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      icon: const Icon(Icons.delete_rounded, color: Colors.white),
+                      label: const Text('Hapus Produk', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                      ),
                     ),
-                    child: const Icon(Icons.delete_rounded, size: 18),
                   ),
                 ],
               ),
@@ -1087,8 +1121,12 @@ class _ExpiredPageState extends State<ExpiredPage> {
             style: TextStyle(color: Colors.grey[700]),
           ),
           actions: [
-            TextButton(
+            ElevatedButton(
               onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700],
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Nanti'),
             ),
             ElevatedButton(

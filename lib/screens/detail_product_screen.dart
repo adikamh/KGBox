@@ -76,8 +76,9 @@ class DetailProductScreen {
   String formatPrice(dynamic price) {
     if (price == null) return '-';
     int value = 0;
-    if (price is int) value = price;
-    else if (price is double) value = price.round();
+    if (price is int) {
+      value = price;
+    } else if (price is double) value = price.round();
     else if (price is String) value = int.tryParse(price) ?? 0;
     else if (price is num) value = price.toInt();
 
@@ -311,25 +312,28 @@ class DetailProductScreen {
 
     String tanggalBeli = '';
     try {
-      if (rawPurchase is String) tanggalBeli = rawPurchase;
-      else if (rawPurchase is Timestamp) tanggalBeli = rawPurchase.toDate().toIso8601String().split('T').first;
+      if (rawPurchase is String) {
+        tanggalBeli = rawPurchase;
+      } else if (rawPurchase is Timestamp) tanggalBeli = rawPurchase.toDate().toIso8601String().split('T').first;
     } catch (_) {}
 
     String productionDate = '';
     try {
-      if (rawProduction is String) productionDate = rawProduction;
-      else if (rawProduction is Timestamp) productionDate = rawProduction.toDate().toIso8601String().split('T').first;
+      if (rawProduction is String) {
+        productionDate = rawProduction;
+      } else if (rawProduction is Timestamp) productionDate = rawProduction.toDate().toIso8601String().split('T').first;
     } catch (_) {}
 
     String expired = '';
     try {
-      if (rawExpired is String) expired = rawExpired;
-      else if (rawExpired is Timestamp) expired = rawExpired.toDate().toIso8601String().split('T').first;
+      if (rawExpired is String) {
+        expired = rawExpired;
+      } else if (rawExpired is Timestamp) expired = rawExpired.toDate().toIso8601String().split('T').first;
     } catch (_) {}
 
     final String price = (src['sellingPrice'] ?? src['price'] ?? src['priceRaw'] ?? '').toString();
     final String jumlah = (src['stock'] ?? src['jumlah_produk'] ?? 0).toString();
-    final List<String> barcodes = (src['barcode_list'] is List) ? List<String>.from(src['barcode_list']) : (src['barcode_list']?.toString().split(',')?.map((s) => s.trim())?.where((s) => s.isNotEmpty)?.toList() ?? <String>[]);
+    final List<String> barcodes = (src['barcode_list'] is List) ? List<String>.from(src['barcode_list']) : (src['barcode_list']?.toString().split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList() ?? <String>[]);
     final String supplier = (src['supplierName'] ?? src['supplier_name'] ?? src['supplier'] ?? '').toString();
 
     return ProductModel(
