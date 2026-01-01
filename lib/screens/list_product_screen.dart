@@ -287,7 +287,23 @@ class ListProductScreen {
     Map<String, dynamic> product,
   ) async {
     final full = product['full'];
-    final Map<String, dynamic> target = (full is List && full.isNotEmpty) ? (full.first as Map<String, dynamic>) : ((full as Map<String, dynamic>?) ?? <String, dynamic>{});
+    Map<String, dynamic> target = {};
+    if (full is List && full.isNotEmpty) {
+      target = Map<String, dynamic>.from(full.first as Map<String, dynamic>);
+    } else if (full is Map) {
+      target = Map<String, dynamic>.from(full as Map<String, dynamic>);
+    }
+
+    // Ensure master id is included for Firestore usage
+    if ((target['id'] == null || target['id'].toString().isEmpty) && product['id'] != null) {
+      target['id'] = product['id'];
+    }
+
+    // Ensure price fields present for edit UI
+    if (target['harga_product'] == null && product['price'] != null) {
+      target['harga_product'] = product['price'].toString();
+    }
+
      final result = await Navigator.push<Map<String, dynamic>?>(
        context,
        MaterialPageRoute(

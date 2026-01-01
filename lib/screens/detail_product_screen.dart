@@ -1,13 +1,12 @@
 // lib/screens/detail_product_screen.dart
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/product_model.dart';
-import '../services/restApi.dart';
-import '../services/config.dart';
 import '../pages/edit_product_page.dart';
 
 class DetailProductScreen {
-  final DataService _dataService = DataService();
-  
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   // Product data
   late Map<String, dynamic> product;
   
@@ -18,31 +17,36 @@ class DetailProductScreen {
   
   // Get formatted product values
   Map<String, dynamic> getFormattedProduct() {
-    // If product contains 'items' (grouped), derive aggregated values
-    if (product.containsKey('items') && product['items'] is List) {
-      final items = (product['items'] as List).cast<Map<String, dynamic>>();
-      final totalStock = items.fold<int>(0, (s, it) => s + _safeInt(it['jumlah_produk']));
-      return {
-        'code': product['id_product'] ?? '-',
-        'name': product['nama_product'] ?? items.first['nama_product'] ?? '-',
-        'category': product['kategori_product'] ?? items.first['kategori_product'] ?? '-',
-        'brand': product['merek_product'] ?? items.first['merek_product'] ?? '-',
-        'purchaseDate': product['tanggal_beli'] ?? items.first['tanggal_beli'] ?? '-',
-        'price': product['harga_product'] ?? items.first['harga_product'] ?? '-',
-        'stock': totalStock.toString(),
-        'expiredDate': product['tanggal_expired'] ?? items.first['tanggal_expired'] ?? '-',
-      };
-    }
+    // Normalize and extract fields from different possible product shapes
+    final code = product['id'] ?? product['productId'] ?? product['id_product'] ?? '';
+    final name = product['name'] ?? product['nama'] ?? product['nama_product'] ?? '-';
+    final category = product['category'] ?? product['kategori'] ?? product['kategori_product'] ?? '-';
+    final brand = product['brand'] ?? product['merek'] ?? product['merek_product'] ?? '-';
+
+    // price may be stored under different keys and types
+    final dynamic rawPrice = product['sellingPrice'] ?? product['price'] ?? product['harga_product'];
+
+    // purchase/created date
+    final dynamic rawPurchase = product['createdAt'] ?? product['productionDate'] ?? product['tanggal_beli'] ?? product['purchaseDate'];
+
+    // expired date
+    final dynamic rawExpired = product['expiredDate'] ?? product['tanggal_expired'] ?? product['expired'];
+
+    // stock if present, otherwise unknown (UI will rely on barcode count)
+    final stockVal = product['stock'] ?? product['jumlah_produk'] ?? 0;
 
     return {
-      'code': product['id_product'] ?? '-',
-      'name': product['nama_product'] ?? '-',
-      'category': product['kategori_product'] ?? '-',
-      'brand': product['merek_product'] ?? '-',
-      'purchaseDate': product['tanggal_beli'] ?? '-',
-      'price': product['harga_product'] ?? '-',
-      'stock': product['jumlah_produk'] ?? '-',
-      'expiredDate': product['tanggal_expired'] ?? '-',
+      'code': code.toString(),
+      'name': name.toString(),
+      'category': category.toString(),
+      'brand': brand.toString(),
+      'priceRaw': rawPrice,
+      'price': formatPrice(rawPrice),
+      'stock': stockVal?.toString() ?? '0',
+      'purchaseRaw': rawPurchase,
+      'purchaseDate': _formatDate(rawPurchase),
+      'expiredRaw': rawExpired,
+      'expiredText': _computeExpiredText(rawExpired),
     };
   }
 
@@ -63,13 +67,66 @@ class DetailProductScreen {
   }
   
   // Format price
-  String formatPrice(String? price) {
+  String formatPrice(dynamic price) {
     if (price == null) return '-';
-    final value = int.tryParse(price) ?? 0;
-    return 'Rp ${value.toString().replaceAllMapped(
+    int value = 0;
+    if (price is int) value = price;
+    else if (price is double) value = price.round();
+    else if (price is String) value = int.tryParse(price) ?? 0;
+    else if (price is num) value = price.toInt();
+
+    final formatted = value.toString().replaceAllMapped(
       RegExp(r"\B(?=(\d{3})+(?!\d))"),
       (m) => '.',
-    )}';
+    );
+    return 'Rp $formatted';
+  }
+
+  // Parse various date shapes (Timestamp, String, DateTime)
+  DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    try {
+      if (v is DateTime) return v;
+      if (v is Timestamp) return v.toDate();
+      if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+      if (v is String) {
+        final s = v.trim();
+        if (RegExp(r"^\d{4}-\d{2}-\d{2}").hasMatch(s)) {
+          return DateTime.parse(s);
+        }
+        return DateTime.tryParse(s);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _formatDate(dynamic raw) {
+    final dt = _parseDate(raw);
+    if (dt == null) return '-';
+    final d = dt.toLocal();
+    const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    final day = d.day.toString().padLeft(2, '0');
+    final month = months[d.month - 1];
+    final year = d.year.toString();
+    return '$day $month $year';
+  }
+
+  String _computeExpiredText(dynamic rawExpired) {
+    final dt = _parseDate(rawExpired);
+    if (dt == null) return '-';
+    final now = DateTime.now();
+    final end = DateTime(dt.year, dt.month, dt.day);
+    final diff = end.difference(DateTime(now.year, now.month, now.day)).inDays;
+    if (diff < 0) return 'Sudah expired';
+    if (diff == 0) return 'Expired hari ini';
+    if (diff <= 14) {
+      if (diff % 7 == 0) {
+        final weeks = (diff / 7).round();
+        return 'Expired dalam $weeks minggu';
+      }
+      return 'Expired dalam $diff hari';
+    }
+    return _formatDate(rawExpired);
   }
   
   // Get icon based on category
@@ -104,24 +161,11 @@ class DetailProductScreen {
   
   // Check if product is expired
   bool isProductExpired() {
-    final expiredDate = product['tanggal_expired'];
-    if (expiredDate == null || expiredDate.isEmpty) return false;
-    
-    try {
-      final parts = expiredDate.toString().split('-');
-      if (parts.length < 3) return false;
-      
-      final expired = DateTime(
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-        int.parse(parts[2]),
-      );
-      final now = DateTime.now();
-      
-      return expired.isBefore(now);
-    } catch (e) {
-      return false;
-    }
+    final raw = product['expiredDate'] ?? product['tanggal_expired'] ?? product['expired'] ?? product['expiredRaw'];
+    final dt = _parseDate(raw);
+    if (dt == null) return false;
+    final now = DateTime.now();
+    return DateTime(dt.year, dt.month, dt.day).isBefore(DateTime(now.year, now.month, now.day));
   }
   
   // Check if stock is low (less than 10)
@@ -180,32 +224,27 @@ class DetailProductScreen {
   
   Future<Map<String, dynamic>> deleteProduct() async {
     try {
-      final productId = product['id'] ?? '';
-      
-      final success = await _dataService.removeId(
-        token,
-        project,
-        collection,
-        appid,
-        productId,
-      );
-      
-      if (success) {
-        return {
-          'success': true,
-          'message': 'Produk berhasil dihapus',
-        };
-      } else {
-        return {
-          'success': false,
-          'message': 'Gagal menghapus produk',
-        };
+      final productId = (product['id'] ?? product['productId'] ?? '').toString();
+      if (productId.isEmpty) {
+        return {'success': false, 'message': 'Product ID kosong'};
       }
+
+      // delete master product doc
+      try {
+        await _firestore.collection('products').doc(productId).delete();
+      } catch (_) {}
+
+      // delete all barcode docs referencing this productId
+      try {
+        final q = await _firestore.collection('product_barcodes').where('productId', isEqualTo: productId).get();
+        for (final d in q.docs) {
+          try { await d.reference.delete(); } catch (_) {}
+        }
+      } catch (_) {}
+
+      return {'success': true, 'message': 'Produk berhasil dihapus'};
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Terjadi kesalahan: $e',
-      };
+      return {'success': false, 'message': 'Terjadi kesalahan: $e'};
     }
   }
   

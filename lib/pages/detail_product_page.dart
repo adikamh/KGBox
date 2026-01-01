@@ -1,27 +1,64 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/restapi.dart';
-import '../services/config.dart';
 import '../screens/detail_product_screen.dart';
 
-class DetailProductPage extends StatelessWidget {
+class DetailProductPage extends StatefulWidget {
   final Map<String, dynamic> product;
-  
+
   const DetailProductPage({
     super.key,
     required this.product,
   });
 
   @override
+  State<DetailProductPage> createState() => _DetailProductPageState();
+}
+
+class _DetailProductPageState extends State<DetailProductPage> {
+  final DetailProductScreen _controller = DetailProductScreen();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  bool _loading = true;
+  List<Map<String, dynamic>> _barcodes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.initialize(widget.product);
+    _loadBarcodes();
+  }
+
+  Future<void> _loadBarcodes() async {
+    setState(() => _loading = true);
+    try {
+      final productId = (widget.product['id'] ?? widget.product['productId'] ?? '').toString();
+      if (productId.isNotEmpty) {
+        final q = await _firestore.collection('product_barcodes').where('productId', isEqualTo: productId).get();
+        _barcodes = q.docs.map((d) {
+          final data = (d.data() as Map<String, dynamic>?) ?? {};
+          return {
+            'barcode': d.id,
+            'scannedAt': data['scannedAt'],
+          };
+        }).toList();
+      } else {
+        _barcodes = [];
+      }
+    } catch (e) {
+      debugPrint('Error loading barcodes: $e');
+      _barcodes = [];
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final DetailProductScreen _controller = DetailProductScreen();
-    _controller.initialize(product);
-    
     final formattedProduct = _controller.getFormattedProduct();
+    final unitCount = _barcodes.length;
     final isExpired = _controller.isProductExpired();
-    final isStockLow = _controller.isStockLow();
-    
+    final isStockLow = unitCount < 10;
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: _buildAppBar(),
@@ -37,8 +74,8 @@ class DetailProductPage extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  // Price and Stock Cards
-                  _buildStatsRow(_controller, formattedProduct),
+                  // Price and Unit Cards
+                  _buildStatsRow(_controller, formattedProduct, unitCount),
                   
                   const SizedBox(height: 20),
                   
@@ -46,39 +83,54 @@ class DetailProductPage extends StatelessWidget {
                   _buildInfoCard(_controller, formattedProduct),
                   
                   const SizedBox(height: 16),
-                  // If product has multiple units, show list of unit ids
-                  Builder(builder: (ctx) {
-                    final units = _controller.getItemUnits();
-                    if (units.length <= 1) return const SizedBox.shrink();
-                    return Card(
+                  // Barcode list from Firestore
+                  if (_loading)
+                    const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
+                  else if (_barcodes.isNotEmpty)
+                    Card(
                       elevation: 0,
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Unit Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const Text('Daftar Barcode', style: TextStyle(fontWeight: FontWeight.bold)),
                             const SizedBox(height: 8),
-                            ...units.map((u) {
-                              final id = u['id'] ?? u['id_product'] ?? u['id_product']?.toString() ?? '';
-                              final barcodeList = (() {
-                                final raw = u['barcode_list'] ?? u['kode_barcodes'] ?? '';
-                                if (raw is String) return raw;
-                                if (raw is List) return raw.join(', ');
-                                return raw.toString();
-                              })();
+                            ..._barcodes.map((b) {
                               return ListTile(
                                 dense: true,
-                                title: Text(id.toString()),
-                                // ignore: dead_code
-                                subtitle: Text(barcodeList),
+                                title: Text(b['barcode'].toString()),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                  onPressed: () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Hapus Barcode'),
+                                        content: Text('Hapus barcode ${b['barcode']}?'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Hapus')),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm != true) return;
+                                    try {
+                                      await _firestore.collection('product_barcodes').doc(b['barcode'].toString()).delete();
+                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barcode dihapus')));
+                                      await _loadBarcodes();
+                                      setState(() {});
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menghapus: $e')));
+                                    }
+                                  },
+                                ),
                               );
                             }).toList(),
                           ],
                         ),
                       ),
-                    );
-                  }),
+                    ),
 
                   const SizedBox(height: 24),
                   
@@ -238,7 +290,9 @@ class DetailProductPage extends StatelessWidget {
   Widget _buildStatsRow(
     DetailProductScreen controller,
     Map<String, dynamic> product,
+    int unitCount,
   ) {
+    final bool isLow = unitCount < 10;
     return Row(
       children: [
         Expanded(
@@ -246,18 +300,18 @@ class DetailProductPage extends StatelessWidget {
             icon: Icons.attach_money_rounded,
             iconColor: Colors.green[600]!,
             title: 'Harga',
-            value: controller.formatPrice(product['price']),
+            value: product['price']?.toString() ?? controller.formatPrice(product['priceRaw']),
           ),
         ),
         const SizedBox(width: 16),
-        Expanded(
+            Expanded(
           child: _buildStatCard(
             icon: Icons.inventory_rounded,
             iconColor: Colors.orange[600]!,
-            title: 'Stok',
-            value: product['stock'].toString(),
-            subtitle: controller.getStockStatus(),
-            subtitleColor: controller.getStockStatusColor(),
+            title: 'Unit',
+            value: unitCount.toString(),
+            subtitle: isLow ? 'Stok Rendah' : 'Stok Aman',
+            subtitleColor: isLow ? Colors.orange : Colors.green,
           ),
         ),
       ],
@@ -392,7 +446,7 @@ class DetailProductPage extends StatelessWidget {
             _buildDetailRow(
               icon: Icons.calendar_today_rounded,
               label: 'Tanggal Beli',
-              value: product['purchaseDate'].toString(),
+              value: product['purchaseDate']?.toString() ?? '-',
             ),
             
             const Divider(height: 32),
@@ -400,7 +454,7 @@ class DetailProductPage extends StatelessWidget {
             _buildDetailRow(
               icon: Icons.calendar_today_rounded,
               label: 'Tanggal Expired',
-              value: product['expiredDate'],
+              value: product['expiredText']?.toString() ?? '-',
               valueColor: controller.getExpiredStatusColor(),
               showStatus: true,
               statusText: controller.getExpiredStatus(),
@@ -569,30 +623,13 @@ class DetailProductPage extends StatelessWidget {
 
                   if (choice == null || choice == 'cancel') return;
 
-                  final firestore = FirebaseFirestore.instance;
-                  final api = DataService();
-
-                  // collect unit ids/barcodes
-                  final List<String> unitIds = [];
-                  final full = product['full'];
-                  if (full is List) {
-                    for (final u in full) {
-                      if (u is Map) {
-                        final id = (u['id_product'] ?? u['id'] ?? u['_id'] ?? u['kode'] ?? u['barcode'] ?? '').toString();
-                        if (id.isNotEmpty && !unitIds.contains(id)) unitIds.add(id);
-                      }
-                    }
-                  } else if (full is Map) {
-                    final id = (full['id_product'] ?? full['id'] ?? full['_id'] ?? full['kode'] ?? full['barcode'] ?? '').toString();
-                    if (id.isNotEmpty) unitIds.add(id);
-                  }
-
+                  // use barcodes loaded from Firestore in state
                   if (choice == 'single') {
-                    if (unitIds.isEmpty) {
+                    if (_barcodes.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada barcode/unit yang dapat dihapus')));
                       return;
                     }
-                    String? selected = unitIds.length == 1 ? unitIds.first : null;
+                    String? selected = _barcodes.length == 1 ? _barcodes.first['barcode']?.toString() : null;
                     final pick = await showDialog<String?>(
                       context: context,
                       builder: (ctx) => AlertDialog(
@@ -601,9 +638,9 @@ class DetailProductPage extends StatelessWidget {
                           width: double.maxFinite,
                           child: ListView.builder(
                             shrinkWrap: true,
-                            itemCount: unitIds.length,
+                            itemCount: _barcodes.length,
                             itemBuilder: (c, i) {
-                              final v = unitIds[i];
+                              final v = _barcodes[i]['barcode']?.toString() ?? '';
                               return RadioListTile<String>(
                                 value: v,
                                 groupValue: selected,
@@ -617,9 +654,9 @@ class DetailProductPage extends StatelessWidget {
                       ),
                     );
                     if (pick == null) return;
-                    try { await firestore.collection('product_barcodes').doc(pick).delete(); } catch (_) {}
-                    try { await api.removeId(token, project, collection, appid, pick); } catch (_) {}
+                    try { await FirebaseFirestore.instance.collection('product_barcodes').doc(pick).delete(); } catch (_) {}
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barcode berhasil dihapus')));
+                    await _loadBarcodes();
                     Navigator.of(context).pop(true);
                     return;
                   }
@@ -628,19 +665,6 @@ class DetailProductPage extends StatelessWidget {
                   final confirm = await controller.showDeleteConfirmation(context, product['name']);
                   if (confirm != true) return;
                   final result = await controller.deleteProduct();
-                  // try delete firestore docs
-                  try {
-                    String masterId = '';
-                    if (full is List && full.isNotEmpty && full.first is Map) {
-                      final fm = full.first as Map<String, dynamic>;
-                      masterId = (fm['id_product'] ?? fm['id'] ?? fm['_id'] ?? '').toString();
-                    }
-                    if (masterId.isNotEmpty) {
-                      try { await firestore.collection('products').doc(masterId).delete(); } catch (_) {}
-                      final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: masterId).get();
-                      for (final d in q.docs) { try { await d.reference.delete(); } catch (_) {} }
-                    }
-                  } catch (e) { debugPrint('Error deleting Firestore docs: $e'); }
 
                   if (result['success'] == true) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.green));
