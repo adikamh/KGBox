@@ -1,7 +1,6 @@
+// ignore: unused_import
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../services/restapi.dart';
-import '../services/config.dart';
 import '../pages/stok_produk_page.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -15,7 +14,6 @@ class StokProdukScreen extends StatefulWidget {
 }
 
 class _StokProdukScreenState extends State<StokProdukScreen> {
-  final DataService _api = DataService();
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _stockHistory = [];
   bool _loading = true;

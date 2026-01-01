@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/config.dart';
 import '../services/restapi.dart';
 import '../pages/catat_barang_keluar_page.dart';
 import '../providers/auth_provider.dart';
-import '../pages/tambah_product_page.dart';
 
 class CatatBarangKeluarScreen extends StatefulWidget {
   const CatatBarangKeluarScreen({super.key});
@@ -52,24 +52,93 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
       final api = DataService();
       // Load products from the `product` collection
       final result = await api.selectAll(token, project, 'product', appid).timeout(const Duration(seconds: 15));
+      debugPrint('selectAll product raw result: $result');
 
       final Map<String, dynamic> jsonResponse = json.decode(result);
-      final List<dynamic> data = jsonResponse['data'] ?? [];
+      List<dynamic> data = jsonResponse['data'] ?? [];
+
+      // If REST reports invalid collection or no data, fallback to Firestore `products` + `product_barcodes`
+      if ((jsonResponse['status']?.toString() == '0' && jsonResponse['message']?.toString().toLowerCase().contains('not a valid collection') == true) || data.isEmpty) {
+        debugPrint('REST selectAll failed or empty; falling back to Firestore products and product_barcodes');
+        try {
+          final firestore = FirebaseFirestore.instance;
+          final prodSnap = await firestore.collection('products').get();
+          final barcodeSnap = await firestore.collection('product_barcodes').get();
+
+          debugPrint('Firestore products count=${prodSnap.size}, product_barcodes count=${barcodeSnap.size}');
+
+          // build mapping productId -> list of barcodes
+          final Map<String, List<String>> prodToBarcodes = {};
+          for (final doc in barcodeSnap.docs) {
+            final map = doc.data();
+            final barcode = doc.id.toString();
+            final mappedId = (map['productId'] ?? map['product_id'] ?? map['id_product'] ?? map['product'] ?? map['master_id'] ?? '').toString();
+            if (mappedId.isNotEmpty) {
+              prodToBarcodes.putIfAbsent(mappedId, () => []).add(barcode);
+            } else if (map.containsKey('barcode')) {
+              final mid = map['barcode'].toString();
+              prodToBarcodes.putIfAbsent(mid, () => []).add(barcode);
+            }
+          }
+
+
+          data = prodSnap.docs.map((d) => {...d.data(), '_docId': d.id}).toList();
+
+          // debug sample (stringify values to avoid Timestamp encoding errors)
+          for (var i = 0; i < min(5, prodSnap.docs.length); i++) {
+            final m = prodSnap.docs[i].data().map((k, v) => MapEntry(k, v?.toString()));
+            debugPrint('products sample[${i}]=${json.encode(m)}');
+          }
+          for (var i = 0; i < min(5, barcodeSnap.docs.length); i++) {
+            final m = barcodeSnap.docs[i].data().map((k, v) => MapEntry(k, v?.toString()));
+            debugPrint('product_barcodes sample[${i}]=${json.encode(m)} (id=${barcodeSnap.docs[i].id})');
+          }
+
+          // attach barcodes from mapping where possible
+          for (final item in data) {
+            final pid = (item['id_product'] ?? item['id'] ?? item['_id'] ?? item['_docId'] ?? '').toString();
+            final barlist = prodToBarcodes[pid] ?? <String>[];
+            if (barlist.isNotEmpty) {
+              item['list_barcode'] = barlist;
+            }
+          }
+        } catch (e) {
+          debugPrint('Firestore fallback failed: $e');
+        }
+      }
 
       final mapped = data.map<Map<String, dynamic>>((p) {
         // normalize id: try several common fields
-        final rawId = p['id_product'] ?? p['id'] ?? p['_id'] ?? '';
+        final rawId = p['id_product'] ?? p['id'] ?? p['_id'] ?? p['_docId'] ?? '';
         final parsedId = rawId is Map ? (rawId['\$oid'] ?? rawId['oid'] ?? rawId.toString()) : rawId.toString();
-        final barcodeField = p['barcode'] ?? p['kode'] ?? p['id_product'] ?? parsedId;
+        // Normalize barcode(s): single barcode field or list in `list_barcode`
+        List<String> barcodes = [];
+        final rawListBarcode = p['list_barcode'] ?? p['list_barcode_json'] ?? p['barcodes'];
+        if (rawListBarcode != null) {
+          if (rawListBarcode is List) {
+            barcodes = rawListBarcode.map((e) => e.toString()).toList();
+          } else if (rawListBarcode is String) {
+            final s = rawListBarcode.trim();
+            try {
+              final parsed = json.decode(s);
+              if (parsed is List) barcodes = parsed.map((e) => e.toString()).toList();
+              else barcodes = s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+            } catch (_) {
+              barcodes = s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+            }
+          }
+        }
+        final barcodeField = p['barcode'] ?? p['kode'] ?? p['id_product'] ?? (barcodes.isNotEmpty ? barcodes.first : parsedId);
         final nama = p['nama_product'] ?? p['nama'] ?? p['name'] ?? 'Tidak ada nama';
         final kategori = p['kategori_product'] ?? p['kategori'] ?? 'Umum';
-        final harga = int.tryParse(p['harga_product']?.toString() ?? p['harga']?.toString() ?? '0') ?? 0;
+        final harga = int.tryParse(p['price']?.toString() ?? p['harga_product']?.toString() ?? p['harga']?.toString() ?? '0') ?? 0;
         final stok = int.tryParse(p['jumlah_produk']?.toString() ?? p['stok']?.toString() ?? '0') ?? 0;
 
         return {
           'id': parsedId,
           'id_product': p['id_product'] ?? parsedId,
           'barcode': barcodeField?.toString(),
+          'barcodes': barcodes,
           'nama': nama,
           'kategori': kategori,
           'harga': harga,
@@ -239,8 +308,10 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
         'no_telepon_customer': _noTeleponController.text.trim(),
         'alamat_toko': _alamatTokoController.text.trim(),
       };
+      // Print payload sent to gocloud for debugging
+      debugPrint('Sending customer payload: ${json.encode(customerMap)}');
 
-      // ignore: unused_local_variable
+      // insert customer and validate response
       final customerResult = await api.insertOne(
         token,
         project,
@@ -248,28 +319,42 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
         appid,
         customerMap,
       );
+      debugPrint('insert customer result: $customerResult');
+      try {
+        if (customerResult == null) throw Exception('Empty response from insert customer');
+        if (customerResult is Map) {
+          final st = customerResult['status'];
+          if (st != null && st.toString() != '1' && st != 1) throw Exception('insert customer failed: $customerResult');
+        } else if (customerResult is String) {
+          final low = customerResult.toLowerCase();
+          if (low.contains('error') || low.contains('failed')) throw Exception('insert customer failed: $customerResult');
+        }
+      } catch (e) {
+        debugPrint('Customer insert validation error: $e');
+        throw e;
+      }
       
       // 3. Generate Order ID
       final orderId = 'ORD${DateTime.now().millisecondsSinceEpoch}${Random().nextInt(1000)}';
       final totalHarga = calculateTotal();
-      
-      // 4. Simpan ke Order
-      // Build order payload (include customer info for easier querying)
+
+      // Build id_product string as comma-separated product ids (optional)
+      final productIds = _scannedProducts.map((p) => (p['id'] ?? p['id_product'] ?? '').toString()).where((s) => s.isNotEmpty).toSet().join(',');
+
+      // 4. Simpan ke Order (match OrderModel fields)
       final orderMap = {
         'ownerid': ownerId,
-        'customer_id': customerId,
-        'order_id': orderId,
-        'staff_id': staffId,
+        'id_product': productIds,
+        'customor_id': customerId,
         'tanggal_order': DateTime.now().toIso8601String(),
         'total_harga': totalHarga.toString(),
-        // duplicate some customer fields if desired by backend
-        'nama_toko': _namaTokoController.text.trim(),
-        'nama_pemilik_toko': _namaPemilikController.text.trim(),
-        'no_telepon_customer': _noTeleponController.text.trim(),
-        'alamat_toko': _alamatTokoController.text.trim(),
+        'id_staff': staffId,
+        'order_id': orderId,
       };
 
-      // ignore: unused_local_variable
+      // Print payload sent to gocloud for debugging
+      debugPrint('Sending order payload: ${json.encode(orderMap)}');
+
       final orderResult = await api.insertOne(
         token,
         project,
@@ -277,33 +362,125 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
         appid,
         orderMap,
       );
+      debugPrint('insert order result: $orderResult');
+      try {
+        if (orderResult == null) throw Exception('Empty response from insert order');
+        if (orderResult is Map) {
+          final st = orderResult['status'];
+          if (st != null && st.toString() != '1' && st != 1) throw Exception('insert order failed: $orderResult');
+        } else if (orderResult is String) {
+          final low = orderResult.toLowerCase();
+          if (low.contains('error') || low.contains('failed')) throw Exception('insert order failed: $orderResult');
+        }
+      } catch (e) {
+        debugPrint('Order insert validation error: $e');
+        throw e;
+      }
       
       // 5. Simpan ke Order Items
       for (final product in _scannedProducts) {
         final productId = product['id'] ?? '';
         final jumlah = product['jumlah'] ?? 1;
         final hargaSatuan = product['harga'] ?? 0;
-        final subtotal = (hargaSatuan is int ? hargaSatuan : int.tryParse(hargaSatuan.toString()) ?? 0) * jumlah;
         
+        final barcodeList = (product['scanned_barcodes'] is List) ? List<String>.from(product['scanned_barcodes']) : <String>[];
+        final barcodeCount = barcodeList.isNotEmpty ? barcodeList.length : (jumlah is int ? jumlah : int.tryParse(jumlah.toString()) ?? 0);
+        final unitPrice = (hargaSatuan is int) ? hargaSatuan : int.tryParse(hargaSatuan.toString()) ?? 0;
+        final totalHargaItem = barcodeCount * unitPrice;
+
         final orderItemMap = {
           'ownerid': ownerId,
           'order_id': orderId,
           'id_product': productId,
-          'jumlah_produk': jumlah.toString(),
-          'harga_satu_pack': hargaSatuan.toString(),
-          'subtotal': subtotal.toString(),
+          'jumlah_produk': barcodeCount.toString(),
+          'list_barcode': json.encode(barcodeList),
+          'harga': unitPrice.toString(),
+          'total_harga': totalHargaItem.toString(),
         };
 
-        await api.insertOne(
+        // Print payload sent to gocloud for debugging
+        debugPrint('Sending order_items payload: ${json.encode(orderItemMap)}');
+
+        final orderItemResult = await api.insertOne(
           token,
           project,
           'order_items',
           appid,
           orderItemMap,
         );
+        debugPrint('insert order_item result: $orderItemResult');
+        try {
+          if (orderItemResult == null) throw Exception('Empty response from insert order_items');
+          if (orderItemResult is Map) {
+            final st = orderItemResult['status'];
+            if (st != null && st.toString() != '1' && st != 1) throw Exception('insert order_items failed: $orderItemResult');
+          } else if (orderItemResult is String) {
+            final low = orderItemResult.toLowerCase();
+            if (low.contains('error') || low.contains('failed')) throw Exception('insert order_items failed: $orderItemResult');
+          }
+        } catch (e) {
+          debugPrint('OrderItems insert validation error: $e');
+          throw e;
+        }
         
-        // 6. Update stok produk (optional)
-        await _updateProductStock(productId, jumlah);
+        // 6. Keep order_items record (store barcodes), then remove mapping docs in Firestore and update stock
+        final removedBarcodes = (product['scanned_barcodes'] is List)
+            ? List<String>.from(product['scanned_barcodes'])
+            : <String>[];
+
+        // Delete mapping documents in Firestore so barcode is no longer mapped (reduces available stock)
+        try {
+          final firestore = FirebaseFirestore.instance;
+          for (final b in removedBarcodes) {
+            final code = b.toString().trim();
+            if (code.isEmpty) continue;
+            try {
+              // attempt delete by doc id first
+              final ref1 = firestore.collection('product_barcodes').doc(code);
+              final snap1 = await ref1.get();
+              if (snap1.exists) {
+                await ref1.delete();
+                debugPrint('Deleted mapping doc product_barcodes/$code (by id)');
+                continue;
+              }
+
+              final ref2 = firestore.collection('product_barcodes').doc(code);
+              final snap2 = await ref2.get();
+              if (snap2.exists) {
+                await ref2.delete();
+                debugPrint('Deleted mapping doc product_barcodes/$code (by id)');
+                continue;
+              }
+
+              // If doc id is not the barcode, try querying by fields like `barcode` or `code`
+              final q1 = await firestore.collection('product_barcodes').where('barcode', isEqualTo: code).get();
+              for (final doc in q1.docs) {
+                await doc.reference.delete();
+                debugPrint('Deleted product_barcodes/${doc.id} (by field barcode)');
+              }
+
+              final q2 = await firestore.collection('product_barcodes').where('product', isEqualTo: code).get();
+              for (final doc in q2.docs) {
+                await doc.reference.delete();
+                debugPrint('Deleted product_barcodes/${doc.id} (by field product)');
+              }
+
+              // Some mappings might store code in field `code` — try common alternative
+              final q3 = await firestore.collection('product_barcodes').where('code', isEqualTo: code).get();
+              for (final doc in q3.docs) {
+                await doc.reference.delete();
+                debugPrint('Deleted product_barcodes/${doc.id} (by field code)');
+              }
+            } catch (e) {
+              debugPrint('Failed deleting mapping for $b: $e');
+            }
+          }
+        } catch (e) {
+          debugPrint('Error deleting mapping docs: $e');
+        }
+
+        // Finally update product stock and barcode list on server/Firestore
+        await _updateProductStock(productId, jumlah, removedBarcodes);
       }
       
       // Success
@@ -338,48 +515,158 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
     }
   }
 
-  Future<void> _updateProductStock(String productId, int jumlahKeluar) async {
+  Future<void> _updateProductStock(String productId, int jumlahKeluar, [List<String>? removedBarcodes]) async {
     try {
       final api = DataService();
-      
-      // Cari produk dari collection yang dikonfigurasi (lebih aman daripada hardcode "products")
-      final result = await api.selectAll(token, project, collection, appid).timeout(const Duration(seconds: 15));
-      final Map<String, dynamic> jsonResponse = json.decode(result);
-      final List<dynamic> products = jsonResponse['data'] ?? [];
 
-      final product = products.firstWhere((p) {
+      // Prefer fetching by id if possible
+      dynamic res;
+      try {
+        res = await api.selectId(token, project, 'product', appid, productId).timeout(const Duration(seconds: 15));
+      } catch (_) {
+        // fallback to selectAll and search
+        res = await api.selectAll(token, project, 'product', appid).timeout(const Duration(seconds: 15));
+      }
+
+      if (res == null) return;
+
+      Map<String, dynamic> respMap;
+      try {
+        respMap = (res is String) ? json.decode(res) as Map<String, dynamic> : (res as Map<String, dynamic>);
+      } catch (e) {
+        debugPrint('Failed to parse product select response: $e');
+        return;
+      }
+
+      final List<dynamic> data = respMap['data'] ?? [];
+      if (data.isEmpty) return;
+
+      // If selectId returned a single item, it will be in data[0]
+      final product = data.firstWhere((p) {
         final idProduct = (p['id_product'] ?? p['id'] ?? p['_id'] ?? '').toString();
-        final barcode = (p['barcode'] ?? p['kode'] ?? '').toString();
+        return idProduct == productId || (p['_id'] ?? p['id'] ?? '').toString() == productId;
+      }, orElse: () => data[0]);
 
-        final normId = idProduct.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').toLowerCase();
-        final normBarcode = barcode.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').toLowerCase();
-        final normSearch = productId.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').toLowerCase();
+      if (product == null) return;
 
-        return idProduct == productId || barcode == productId || normId == normSearch || normBarcode == normSearch;
-      }, orElse: () => null);
-      
-      if (product != null) {
-        final currentStock = int.tryParse(product['jumlah_produk']?.toString() ?? '0') ?? 0;
-        final newStock = currentStock - jumlahKeluar;
-        
-        // Update stok via updateId endpoint (API expects update_field/update_value)
-        final idToUpdate = (product['_id'] ?? product['id'] ?? '').toString();
-        final safeNewStock = newStock < 0 ? 0 : newStock;
+      // Normalize existing barcode list which might be stored as JSON string or a list
+      final rawList = product['list_barcode'] ?? product['list_barcode_json'] ?? product['barcode_list'] ?? product['barcode'] ?? product['kode'];
+      List<String> barcodes = [];
+      if (rawList is List) {
+        barcodes = rawList.map((e) => e.toString()).toList();
+      } else if (rawList is String) {
+        final s = rawList.trim();
+        // Try JSON decode first
+        try {
+          final parsed = json.decode(s);
+          if (parsed is List) barcodes = parsed.map((e) => e.toString()).toList();
+          else barcodes = s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+        } catch (_) {
+          barcodes = s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+        }
+      }
 
-        debugPrint('Updating stock for id=$idToUpdate -> $safeNewStock');
+      // Normalize and remove scanned barcodes (if provided)
+      final List<String> removed = (removedBarcodes ?? []).map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+      if (removed.isNotEmpty) {
+        for (final b in removed) {
+          barcodes.removeWhere((x) => x.toString().trim() == b);
+        }
+      }
 
-        final success = await api.updateId(
-          'jumlah_produk',
-          safeNewStock.toString(),
-          token,
-          project,
-          'product',
-          appid,
-          idToUpdate,
-        );
+      // Compute new stock from remaining barcodes (fallback to jumlah_produk if absent)
+      final intFromField = int.tryParse(product['jumlah_produk']?.toString() ?? '') ?? barcodes.length;
+      final newStock = barcodes.isNotEmpty ? barcodes.length : (intFromField - jumlahKeluar).clamp(0, 1 << 30);
 
-        if (!success) {
-          debugPrint('Failed to update stock for $idToUpdate via updateId endpoint');
+      final idToUpdate = (product['_id'] ?? product['id'] ?? product['id_product'] ?? '').toString();
+      final updateMap = <String, dynamic>{
+        'jumlah_produk': newStock.toString(),
+        'list_barcode': json.encode(barcodes),
+      };
+
+      // First, attempt to update Firestore directly to remove scanned barcodes and set new stock
+      try {
+        final firestore = FirebaseFirestore.instance;
+        DocumentReference<Map<String, dynamic>>? docRef;
+        DocumentSnapshot<Map<String, dynamic>>? snap;
+
+        // Try productId as doc id in common collections
+        try {
+          docRef = firestore.collection('products').doc(productId);
+          snap = await docRef.get();
+          if (!snap.exists) {
+            docRef = firestore.collection('product').doc(productId);
+            snap = await docRef.get();
+          }
+        } catch (_) {
+          snap = null;
+        }
+
+        // If not found, try idToUpdate as fallback doc id
+        if ((snap == null || !snap.exists) && idToUpdate.isNotEmpty) {
+          try {
+            docRef = firestore.collection('products').doc(idToUpdate);
+            snap = await docRef.get();
+            if (!snap.exists) {
+              docRef = firestore.collection('product').doc(idToUpdate);
+              snap = await docRef.get();
+            }
+          } catch (_) {
+            snap = null;
+          }
+        }
+
+        if (snap != null && snap.exists && docRef != null) {
+          final data = snap.data() ?? {};
+          final rawListFs = data['list_barcode'] ?? data['barcodes'] ?? data['barcode'] ?? data['list_barcode_json'];
+
+          if (rawListFs is List) {
+            // Read-modify-write: build a normalized list, remove scanned barcodes, then write back
+            List<String> fsBarcodes = rawListFs.map((e) => e.toString()).toList();
+            debugPrint('Firestore before update (list_barcode): ${fsBarcodes}');
+            if (removed.isNotEmpty) {
+              fsBarcodes.removeWhere((x) => removed.contains(x.toString().trim()));
+            }
+            debugPrint('Firestore after update (list_barcode): ${fsBarcodes}');
+            await docRef.update({'list_barcode': fsBarcodes, 'jumlah_produk': newStock});
+          } else if (rawListFs is String) {
+            // Parse string list, remove items, and write back as JSON string
+            List<String> fsBarcodes = [];
+            final s = rawListFs.toString();
+            try {
+              final parsed = json.decode(s);
+              if (parsed is List) fsBarcodes = parsed.map((e) => e.toString()).toList();
+              else fsBarcodes = s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+            } catch (_) {
+              fsBarcodes = s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+            }
+
+            if (removed.isNotEmpty) {
+              for (final b in removed) {
+                fsBarcodes.removeWhere((x) => x.toString().trim() == b);
+              }
+            }
+
+            await docRef.update({'list_barcode': json.encode(fsBarcodes), 'jumlah_produk': newStock.toString()});
+          } else {
+            // No barcode array present; just update jumlah_produk
+            await docRef.update({'jumlah_produk': newStock});
+          }
+        }
+      } catch (e) {
+        debugPrint('Failed Firestore update: $e');
+      }
+
+      // Try updateOne (update by id with map) to keep REST in sync
+      try {
+        await api.updateOne(token, project, 'product', appid, idToUpdate, updateMap);
+      } catch (e) {
+        // fallback to updating fields individually
+        try {
+          await api.updateId('jumlah_produk', newStock.toString(), token, project, 'product', appid, idToUpdate);
+          await api.updateId('list_barcode', json.encode(barcodes), token, project, 'product', appid, idToUpdate);
+        } catch (e2) {
+          debugPrint('Failed fallback updates: $e2');
         }
       }
     } catch (e) {
@@ -435,8 +722,38 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
     );
   }
 
-  void openProductPicker(BuildContext context) {
-    showModalBottomSheet(
+  Future<void> openProductPicker(BuildContext context) async {
+    // Ensure product cache is loaded before showing picker
+    if (_allProducts.isEmpty) {
+      try {
+        await _loadAllProducts();
+      } catch (e) {
+        debugPrint('openProductPicker: _loadAllProducts threw: $e');
+      }
+    }
+
+    if (_allProducts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Gagal memuat produk. Coba lagi.'),
+          action: SnackBarAction(
+            label: 'Muat Ulang',
+            onPressed: () async {
+              try {
+                await _loadAllProducts();
+                if (mounted) setState(() {});
+                if (_allProducts.isNotEmpty) openProductPicker(context);
+              } catch (e) {
+                debugPrint('Retry loadAllProducts failed: $e');
+              }
+            },
+          ),
+        ),
+      );
+      return;
+    }
+
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
@@ -446,91 +763,155 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
           maxChildSize: 0.95,
           expand: false,
           builder: (context, controller) {
-            return Container(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  Container(
-                    height: 6,
-                    width: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Pilih Produk', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: ListView.separated(
-                      controller: controller,
-                      itemCount: _allProducts.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final p = _allProducts[index];
-                        final harga = p['harga'] ?? 0;
-                        final stok = p['stok'] ?? 0;
-                        return ListTile(
-                          title: Text(p['nama'] ?? 'Tanpa Nama'),
-                          subtitle: Text('Stok: $stok • Rp ${harga.toString()}'),
-                          trailing: const Icon(Icons.add_circle_outline),
-                          onTap: () async {
-                            // Ask quantity
-                            final qtyStr = await showDialog<String?>(
-                              context: context,
-                              builder: (dctx) {
-                                final qtyController = TextEditingController(text: '1');
-                                return AlertDialog(
-                                  title: const Text('Jumlah'),
-                                  content: TextField(
-                                    controller: qtyController,
-                                    keyboardType: TextInputType.number,
-                                    decoration: const InputDecoration(hintText: 'Masukkan jumlah'),
-                                  ),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(dctx, null), child: const Text('Batal')),
-                                    ElevatedButton(onPressed: () => Navigator.pop(dctx, qtyController.text), child: const Text('OK')),
-                                  ],
-                                );
-                              },
-                            );
+            // Build a flattened list of barcode entries: one entry per barcode
+            final List<Map<String, dynamic>> barcodeEntries = [];
+            for (final p in _allProducts) {
+              final idProd = (p['id'] ?? p['id_product'] ?? '').toString();
+              final nama = p['nama']?.toString() ?? 'Tanpa Nama';
+              final stok = p['stok'] is int ? p['stok'] as int : int.tryParse(p['stok']?.toString() ?? '0') ?? 0;
+              final harga = p['harga'] ?? 0;
 
-                            if (qtyStr == null) return;
-                            final qty = int.tryParse(qtyStr) ?? 1;
-                            if (qty <= 0) return;
-                            if (stok is int && qty > stok) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Stok hanya $stok')));
-                              return;
-                            }
+              final List<String> barcodes = [];
+              try {
+                if (p['barcodes'] is List) barcodes.addAll(List<String>.from(p['barcodes'].map((e) => e.toString())));
+                else if (p['barcode'] != null) barcodes.add(p['barcode'].toString());
+              } catch (_) {}
 
-                            final idProd = p['id']?.toString() ?? p['id_product']?.toString() ?? '';
+              if (barcodes.isEmpty) {
+                // still add one entry with fallback barcode equal to product id
+                barcodeEntries.add({
+                  'productId': idProd,
+                  'nama': nama,
+                  'barcode': (p['barcode'] ?? idProd).toString(),
+                  'stok': stok,
+                  'harga': harga,
+                });
+              } else {
+                for (final b in barcodes) {
+                  barcodeEntries.add({
+                    'productId': idProd,
+                    'nama': nama,
+                    'barcode': b.toString(),
+                    'stok': stok,
+                    'harga': harga,
+                  });
+                }
+              }
+            }
 
-                            setState(() {
-                              final existingIndex = _scannedProducts.indexWhere((e) => e['id'] == idProd);
-                              if (existingIndex >= 0) {
-                                final current = ( _scannedProducts[existingIndex]['jumlah'] ?? 0) as int;
-                                _scannedProducts[existingIndex]['jumlah'] = current + qty;
-                              } else {
-                                _scannedProducts.add({
-                                  'id': idProd,
-                                  'nama': p['nama'],
-                                  'kategori': p['kategori'],
-                                  'harga': p['harga'],
-                                  'stok': p['stok'],
-                                  'full': p['full'] ?? p,
-                                  'jumlah': qty,
+            // preserve selected barcodes across rebuilds of the inner StatefulBuilder
+            final Map<String, bool> selectedBarcodes = {};
+
+            return StatefulBuilder(
+              builder: (context, setModalState) {
+                Widget buildBarcodeItem(int index) {
+                  final e = barcodeEntries[index];
+                  final barcode = e['barcode']?.toString() ?? '';
+                  final nama = e['nama']?.toString() ?? 'Tanpa Nama';
+                  final harga = e['harga'] ?? 0;
+
+                  final isChecked = selectedBarcodes[barcode] == true;
+
+                  return CheckboxListTile(
+                    value: isChecked,
+                    onChanged: (v) => setModalState(() => selectedBarcodes[barcode] = v == true),
+                    title: Text(nama),
+                    subtitle: Text('Barcode: $barcode • Rp ${harga.toString()}'),
+                    controlAffinity: ListTileControlAffinity.leading,
+                  );
+                }
+
+                if (barcodeEntries.isEmpty) {
+                  return Center(child: Padding(padding: const EdgeInsets.all(16.0), child: Text('Tidak ada data barcode')));
+                }
+
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 6,
+                        width: 60,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Pilih Produk Manual', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.separated(
+                          controller: controller,
+                          itemCount: barcodeEntries.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) => buildBarcodeItem(index),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Tutup'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                // Collect selected barcodes grouped by productId
+                                final Map<String, List<String>> grouped = {};
+                                selectedBarcodes.forEach((barcode, sel) {
+                                  if (sel != true) return;
+                                  final entry = barcodeEntries.firstWhere((e) => (e['barcode']?.toString() ?? '') == barcode, orElse: () => {});
+                                  if (entry.isEmpty) return;
+                                  final pid = (entry['productId'] ?? '').toString();
+                                  grouped.putIfAbsent(pid, () => []).add(barcode);
                                 });
-                              }
-                            });
 
-                            Navigator.pop(context); // close bottom sheet
-                          },
-                        );
-                      },
-                    ),
+                                // Add grouped selections into _scannedProducts
+                                setState(() {
+                                  grouped.forEach((pid, barlist) {
+                                    if (pid.isEmpty) return;
+                                    final prod = _allProducts.firstWhere((p) => (p['id']?.toString() ?? p['id_product']?.toString() ?? '') == pid, orElse: () => {});
+                                    if (prod.isEmpty) return;
+                                    final existingIndex = _scannedProducts.indexWhere((e) => (e['id'] ?? e['id_product'])?.toString() == pid);
+                                    if (existingIndex >= 0) {
+                                      final current = (_scannedProducts[existingIndex]['jumlah'] is int)
+                                          ? _scannedProducts[existingIndex]['jumlah'] as int
+                                          : int.tryParse(_scannedProducts[existingIndex]['jumlah']?.toString() ?? '0') ?? 0;
+                                      _scannedProducts[existingIndex]['jumlah'] = current + barlist.length;
+                                      final list = ( _scannedProducts[existingIndex]['scanned_barcodes'] as List?) ?? <String>[];
+                                      list.addAll(barlist);
+                                      _scannedProducts[existingIndex]['scanned_barcodes'] = list;
+                                    } else {
+                                      _scannedProducts.add({
+                                        'id': pid,
+                                        'nama': prod['nama'],
+                                        'kategori': prod['kategori'],
+                                        'harga': prod['harga'],
+                                        'stok': prod['stok'],
+                                        'full': prod['full'] ?? prod,
+                                        'jumlah': barlist.length,
+                                        'scanned_barcodes': barlist,
+                                      });
+                                    }
+                                });
+                                });
+
+                                Navigator.pop(context);
+                              },
+                              child: const Text('Tambahkan Terpilih'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             );
           },
         );
@@ -566,6 +947,8 @@ class _ScannerScreenState extends State<ScannerScreen>
 
   late AnimationController _animController;
   late Animation<double> _scanLineAnim;
+  // Buffer for scanned barcodes to be processed later
+  final List<String> _pendingBarcodes = [];
 
   @override
   void initState() {
@@ -581,8 +964,9 @@ class _ScannerScreenState extends State<ScannerScreen>
     );
   }
 
-  void onBarcodeDetect(String barcode) {
+  void onBarcodeDetect(String barcode) async {
     final code = barcode.trim();
+    debugPrint('Scanner: scanned code="$code"');
     if (code.isEmpty) return;
     if (_isProcessing) return;
     if (_lastScannedCode == code) return;
@@ -590,121 +974,19 @@ class _ScannerScreenState extends State<ScannerScreen>
     _lastScannedCode = code;
     _isProcessing = true;
 
-        // Cari produk berdasarkan berbagai kemungkinan field (id_product, _id, id, barcode, kode, nama)
-        final codeNormalized = code.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').toLowerCase();
-        final codeLower = code.toLowerCase();
-
-        final foundProduct = widget.allProducts.firstWhere(
-          (p) {
-            final productData = p['full'] ?? {};
-
-            final idProduct = (productData['id_product'] ?? p['id_product'] ?? productData['id'] ?? p['id'] ?? productData['_id'] ?? '').toString();
-            final barcodeProduct = (productData['barcode'] ?? productData['kode'] ?? p['barcode'] ?? '').toString();
-            final nameStr = (p['nama'] ?? productData['nama_product'] ?? '').toString().toLowerCase();
-
-            final idNormalized = idProduct.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').toLowerCase();
-            final barcodeNormalized = barcodeProduct.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').toLowerCase();
-
-            return idProduct == code ||
-                barcodeProduct == code ||
-                idNormalized == codeNormalized ||
-                barcodeNormalized == codeNormalized ||
-                nameStr.contains(codeLower);
-          },
-          orElse: () => <String, dynamic>{},
-        );
-
-    if (foundProduct.isNotEmpty) {
-      final productId = foundProduct['id'] ?? '';
-      final stok = (foundProduct['stok'] is int)
-          ? foundProduct['stok'] as int
-          : int.tryParse(foundProduct['stok']?.toString() ?? '0') ?? 0;
-
-      final existingIndex = widget.scannedProducts.indexWhere((p) => p['id'] == productId);
-
-      // If stok kosong, jangan tambahkan
-      if (stok <= 0) {
-        HapticFeedback.vibrate();
-        _showSnackbar('Stok ${foundProduct['nama']} habis', isError: true);
-      } else {
-        setState(() {
-          if (existingIndex >= 0) {
-            final current = (widget.scannedProducts[existingIndex]['jumlah'] ?? 0) as int;
-            if (current + 1 > stok) {
-              // melebihi stok
-              HapticFeedback.vibrate();
-              _showSnackbar('Tidak bisa menambah, stok hanya $stok', isError: true);
-            } else {
-              widget.scannedProducts[existingIndex]['jumlah'] = current + 1;
-              HapticFeedback.mediumImpact();
-              _showSnackbar('${foundProduct['nama']} jumlah diperbarui: ${current + 1}', isError: false);
-            }
-          } else {
-            widget.scannedProducts.add({
-              ...foundProduct,
-              'jumlah': 1,
-            });
-            HapticFeedback.mediumImpact();
-            _showSnackbar('${foundProduct['nama']} ditambahkan', isError: false);
-          }
-        });
-
-        widget.onProductsChanged(List.from(widget.scannedProducts));
-      }
+    // Buffer mode: collect barcodes first, resolve later when user taps Process
+    if (!_pendingBarcodes.contains(code)) {
+      _pendingBarcodes.add(code);
+      debugPrint('Buffered barcode: $code (pending=${_pendingBarcodes.length})');
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Barcode ditambahkan ke buffer (${_pendingBarcodes.length})')));
     } else {
       HapticFeedback.vibrate();
-      // Show snackbar with action to add product manually
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Produk tidak ditemukan: $code'),
-          action: SnackBarAction(
-            label: 'Tambah',
-            onPressed: () async {
-              // Open AddProductPage and register callback to receive created product
-                        await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AddProductPage(
-                    userRole: '',
-                    barcode: code,
-                    ownerId: widget.ownerId,
-                    onProductAdded: (productMap) {
-                      // Convert returned product to local format and add to scannedProducts
-                      try {
-                        final idProd = productMap['id_product']?.toString() ?? productMap['_id']?.toString() ?? '';
-                        final nama = productMap['nama_product']?.toString() ?? 'Tidak ada nama';
-                        final kategori = productMap['kategori_product']?.toString() ?? 'Umum';
-                        final harga = int.tryParse(productMap['harga_product']?.toString() ?? '0') ?? 0;
-                        final stok = int.tryParse(productMap['jumlah_produk']?.toString() ?? '0') ?? 0;
-
-                        setState(() {
-                          widget.scannedProducts.add({
-                            'id': idProd,
-                            'nama': nama,
-                            'kategori': kategori,
-                            'harga': harga,
-                            'stok': stok,
-                            'full': productMap,
-                            'jumlah': 1,
-                          });
-                        });
-
-                        widget.onProductsChanged(List.from(widget.scannedProducts));
-                        _showSnackbar('$nama ditambahkan', isError: false);
-                      } catch (e) {
-                        _showSnackbar('Gagal menambahkan produk baru', isError: true);
-                      }
-                    },
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barcode sudah ada di buffer')));
     }
 
-    Future.delayed(const Duration(milliseconds: 800), () {
+    // allow next scan shortly
+    Future.delayed(const Duration(milliseconds: 400), () {
       if (mounted) {
         setState(() {
           _lastScannedCode = null;
@@ -712,16 +994,10 @@ class _ScannerScreenState extends State<ScannerScreen>
         });
       }
     });
-  }
 
-  void _showSnackbar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-        duration: const Duration(milliseconds: 600),
-      ),
-    );
+    return;
+
+        // Cari produk berdasarkan berbagai kemungkinan field (id_product, _id, id, barcode, kode, nama)
   }
 
   void switchCamera() {
@@ -730,6 +1006,150 @@ class _ScannerScreenState extends State<ScannerScreen>
 
   void toggleTorch() {
     controller.toggleTorch();
+  }
+
+  Future<void> _processPendingBarcodes() async {
+    if (_pendingBarcodes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada barcode di buffer')));
+      return;
+    }
+
+    final Map<String, List<String>> mapped = {};
+    final List<String> unmapped = [];
+
+    // Resolve productId for each barcode via Firestore mapping
+    for (final code in List<String>.from(_pendingBarcodes)) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('product_barcodes').doc(code).get();
+        if (doc.exists) {
+          final m = doc.data() ?? {};
+          final mappedId = (m['productId'] ?? m['product_id'] ?? m['id_product'] ?? m['master_id'] ?? m['id'] ?? '').toString();
+          if (mappedId.isNotEmpty) {
+            mapped.putIfAbsent(mappedId, () => []).add(code);
+            continue;
+          }
+        }
+        unmapped.add(code);
+      } catch (e) {
+        unmapped.add(code);
+      }
+    }
+
+    final api = DataService();
+
+    // For each mapped productId, fetch master and add grouped product
+    for (final entry in mapped.entries) {
+      final mappedId = entry.key;
+      final codes = entry.value;
+
+      Map<String, dynamic>? pm;
+      // try local cache
+      final local = widget.allProducts.firstWhere((p) {
+        final pid = (p['id'] ?? p['id_product'] ?? p['full']?['_id'] ?? '').toString();
+        final pidNorm = pid.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').toLowerCase();
+        final mappedNorm = mappedId.replaceAll(RegExp(r'[^0-9a-zA-Z]'), '').toLowerCase();
+        return pid == mappedId || pidNorm == mappedNorm;
+      }, orElse: () => <String, dynamic>{});
+
+      if (local.isNotEmpty) {
+        pm = local['full'] as Map<String, dynamic>? ?? local;
+      }
+
+      if (pm == null) {
+        // try REST
+        try {
+          final selRes = await api.selectWhere(token, project, 'product', appid, 'id_product', mappedId).timeout(const Duration(seconds: 10));
+          if (selRes != null) {
+            final Map<String, dynamic> parsed = (selRes is String) ? json.decode(selRes) as Map<String, dynamic> : (selRes as Map<String, dynamic>);
+            final List<dynamic> d = parsed['data'] ?? [];
+            if (d.isNotEmpty) pm = d[0] as Map<String, dynamic>;
+          }
+        } catch (_) {}
+      }
+
+      if (pm == null) {
+        // try Firestore products collection by doc id
+        try {
+          final doc = await FirebaseFirestore.instance.collection('products').doc(mappedId).get();
+          if (doc.exists) pm = doc.data();
+        } catch (_) {}
+      }
+
+      if (pm == null) {
+        // try fallback collection 'product'
+        try {
+          final doc = await FirebaseFirestore.instance.collection('product').doc(mappedId).get();
+          if (doc.exists) pm = doc.data();
+        } catch (_) {}
+      }
+
+      if (pm != null) {
+        // normalize
+        List<String> barcodes = [];
+        final rawListBarcode = pm['list_barcode'] ?? pm['list_barcode_json'] ?? pm['barcodes'] ?? pm['barcode'];
+        if (rawListBarcode != null) {
+          if (rawListBarcode is List) barcodes = rawListBarcode.map((e) => e.toString()).toList();
+          else if (rawListBarcode is String) {
+            try {
+              final parsed = json.decode(rawListBarcode);
+              if (parsed is List) barcodes = parsed.map((e) => e.toString()).toList();
+              else barcodes = rawListBarcode.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+            } catch (_) {
+              barcodes = rawListBarcode.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+            }
+          }
+        }
+
+        final parsedId = (pm['productId'] ?? pm['id_product'] ?? pm['id'] ?? pm['_id'] ?? mappedId).toString();
+        final nama = pm['nama_product'] ?? pm['nama'] ?? pm['name'] ?? pm['title'] ?? 'Tidak ada nama';
+        final kategori = pm['category'] ?? pm['kategori_product'] ?? pm['kategori'] ?? 'Umum';
+        final harga = int.tryParse(pm['price']?.toString() ?? pm['harga_product']?.toString() ?? pm['harga']?.toString() ?? '0') ?? 0;
+        final stok = int.tryParse(pm['jumlah_produk']?.toString() ?? pm['stok']?.toString() ?? '0') ?? 0;
+
+        final masterObj = {
+          'id': parsedId,
+          'id_product': pm['id_product'] ?? parsedId,
+          'barcode': pm['barcode'] ?? (barcodes.isNotEmpty ? barcodes.first : parsedId),
+          'barcodes': barcodes,
+          'nama': nama,
+          'kategori': kategori,
+          'harga': harga,
+          'stok': stok,
+          'full': pm,
+        };
+
+        // add or update scannedProducts
+        setState(() {
+          final existingIndex = widget.scannedProducts.indexWhere((p) => (p['id'] ?? p['id_product'])?.toString() == parsedId);
+          if (existingIndex >= 0) {
+            final current = (widget.scannedProducts[existingIndex]['jumlah'] ?? 0) as int;
+            widget.scannedProducts[existingIndex]['jumlah'] = current + codes.length;
+            final list = (widget.scannedProducts[existingIndex]['scanned_barcodes'] as List?) ?? <String>[];
+            list.addAll(codes);
+            widget.scannedProducts[existingIndex]['scanned_barcodes'] = list;
+          } else {
+            widget.scannedProducts.add({
+              ...masterObj,
+              'jumlah': codes.length,
+              'scanned_barcodes': codes,
+            });
+          }
+        });
+      } else {
+        // mark these codes as unmapped
+        unmapped.addAll(codes);
+      }
+    }
+
+    // Clear processed barcodes
+    _pendingBarcodes.clear();
+    widget.onProductsChanged(List.from(widget.scannedProducts));
+
+    if (unmapped.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Beberapa barcode belum dipetakan: ${unmapped.take(5).join(", ")}')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Semua barcode diproses')));
+    }
   }
 
   @override
@@ -741,13 +1161,55 @@ class _ScannerScreenState extends State<ScannerScreen>
 
   @override
   Widget build(BuildContext context) {
-    return ScannerPage(
-      controller: controller,
-      scanLineAnim: _scanLineAnim,
-      scannedProductsCount: widget.scannedProducts.length,
-      onBarcodeDetect: onBarcodeDetect,
-      onSwitchCamera: switchCamera,
-      onToggleTorch: toggleTorch,
+    return Stack(
+      children: [
+        ScannerPage(
+          controller: controller,
+          scanLineAnim: _scanLineAnim,
+          scannedProductsCount: widget.scannedProducts.length,
+          onBarcodeDetect: onBarcodeDetect,
+          onSwitchCamera: switchCamera,
+          onToggleTorch: toggleTorch,
+        ),
+        Positioned(
+          bottom: 24,
+          right: 16,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FloatingActionButton.small(
+                heroTag: 'process_pending',
+                onPressed: _processPendingBarcodes,
+                tooltip: 'Proses (${_pendingBarcodes.length})',
+                child: const Icon(Icons.play_arrow),
+              ),
+              const SizedBox(height: 8),
+              FloatingActionButton.small(
+                heroTag: 'view_pending',
+                onPressed: () {
+                  showDialog<void>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Pending Barcodes'),
+                      content: SizedBox(
+                        width: double.maxFinite,
+                        child: SingleChildScrollView(
+                          child: Text(_pendingBarcodes.isNotEmpty ? _pendingBarcodes.join('\n') : '(kosong)'),
+                        ),
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Tutup')),
+                      ],
+                    ),
+                  );
+                },
+                tooltip: 'Lihat (${_pendingBarcodes.length})',
+                child: const Icon(Icons.list),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

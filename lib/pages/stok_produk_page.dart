@@ -108,10 +108,6 @@ class _StokProdukPageState extends State<StokProdukPage> {
     return stock <= 10;
   }).length;
   
-  int get _outOfStockProducts => _sortedProducts.where((p) {
-    final stock = int.tryParse((p['jumlah_produk'] ?? p['stok'] ?? '0').toString()) ?? 0;
-    return stock == 0;
-  }).length;
   
   int get _totalStock => _sortedProducts.fold<int>(0, (sum, p) {
     final stock = int.tryParse((p['jumlah_produk'] ?? p['stok'] ?? '0').toString()) ?? 0;

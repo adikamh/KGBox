@@ -56,15 +56,6 @@ class DetailProductScreen {
     };
   }
 
-  // Safe int parser helper
-  int _safeInt(dynamic value) {
-    if (value == null) return 0;
-    if (value is int) return value;
-    if (value is double) return value.round();
-    if (value is String) return int.tryParse(value) ?? 0;
-    return 0;
-  }
-
   List<Map<String, dynamic>> getItemUnits() {
     if (product.containsKey('items') && product['items'] is List) {
       return (product['items'] as List).cast<Map<String, dynamic>>();

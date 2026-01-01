@@ -52,6 +52,7 @@ class _DetailProductPageState extends State<DetailProductPage> {
     }
   }
 
+  // ignore: unused_element
   Future<void> _pickAndSaveExpiredDate(Map<String, dynamic> product) async {
     try {
       final rawExpired = product['expiredRaw'] ?? product['expiredDate'] ?? product['tanggal_expired'];

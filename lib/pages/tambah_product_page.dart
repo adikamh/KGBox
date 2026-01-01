@@ -41,6 +41,7 @@ class _AddProductPageState extends State<AddProductPage> {
   bool _isLoading = false;
   Map<String, int>? _scannedCountsMap;
   final List<String> _barcodeList = [];
+  // ignore: unused_field
   String _selectedCategory = 'Makanan';
 
   @override

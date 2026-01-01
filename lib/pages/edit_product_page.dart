@@ -28,6 +28,7 @@ class _EditProductPageState extends State<EditProductPage> {
   List<Map<String, dynamic>> _suppliers = [];
   bool _loadingSuppliers = true;
   String? _selectedSupplierId;
+  // ignore: unused_field
   bool _isCategoryOther = false;
   final TextEditingController _categoryFreeController = TextEditingController();
 
@@ -74,7 +75,8 @@ class _EditProductPageState extends State<EditProductPage> {
   Future<void> _loadSuppliers() async {
     setState(() => _loadingSuppliers = true);
     try {
-      final owner = widget.product.ownerid ?? '';
+      
+      final owner = widget.product.ownerid;
       final firestore = FirebaseFirestore.instance;
       Query q = firestore.collection('suppliers');
       if (owner.isNotEmpty) q = q.where('ownerid', isEqualTo: owner);
@@ -430,6 +432,7 @@ class _EditProductPageState extends State<EditProductPage> {
   Widget _buildCategoryField() {
     final categories = _controller.getAvailableCategories();
     final current = _controllers['kategori_product']?.text ?? '';
+    // ignore: unused_local_variable
     final initialCategory = categories.contains(current) ? current : null;
 
     return Column(
