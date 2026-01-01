@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:kgbox/screens/catat_barang_keluar_screen.dart';
 import '../screens/dashboard_staff_screen.dart';
 
 class DashboardStaffPage extends StatefulWidget {
@@ -522,12 +523,13 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
           value: _controller.getTotalQuantity().toString(),
           label: 'Produk\nKeluar',
           color: const Color.fromARGB(255, 111, 111, 111),
-          onPressed: () {
-            _controller.navigateToProductOut(context);
-            // Refresh data setelah kembali dari catat barang keluar
-            Future.delayed(const Duration(seconds: 2), () {
-              if (mounted) _refreshData();
-            });
+          onPressed: () async {
+            // Navigate to Catat Barang Keluar and refresh immediately after returning
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CatatBarangKeluarScreen()),
+            );
+            if (mounted) await _refreshData();
           },
         ),
       ],

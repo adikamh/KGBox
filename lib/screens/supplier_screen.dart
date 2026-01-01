@@ -1,14 +1,13 @@
 // ignore_for_file: unnecessary_type_check
 
+// ignore: unused_import
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/config.dart';
 import '../pages/supplier_page.dart';
 import '../providers/auth_provider.dart';
-import '../models/supplier_model.dart';
 
 class SupplierScreen extends StatefulWidget {
   const SupplierScreen({super.key});
@@ -620,6 +619,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
       final firestore = FirebaseFirestore.instance;
       // Determine document id robustly: prefer _docId, then supplier_id, then extracted id
       String docId = '';
+      // ignore: dead_code
       final rawMap = raw is Map ? raw : {};
       if (rawMap.containsKey('_docId')) docId = rawMap['_docId']?.toString() ?? '';
       if (docId.isEmpty && rawMap.containsKey('supplier_id')) docId = rawMap['supplier_id']?.toString() ?? '';

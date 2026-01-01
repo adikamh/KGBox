@@ -1,10 +1,10 @@
 // lib/screens/edit_product_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+// ignore: unused_import
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/product_model.dart';
-import '../services/config.dart';
 
 /// A lightweight controller/helper for the Edit Product page.
 /// Provides methods to initialize data, create/dispose text controllers,
@@ -43,7 +43,7 @@ class EditProductScreen {
     _controllers['tanggal_beli'] = TextEditingController(text: tanggalBeliText);
     _controllers['harga_product'] = TextEditingController(text: _formatPriceDisplay(product.harga_product));
     // production date (if present in model) - format for display
-    String prodText = product.production_date ?? '';
+    String prodText = product.production_date;
     if (prodText.isNotEmpty) {
       try {
         final parsed = DateFormat('yyyy-MM-dd').parse(prodText);
@@ -63,7 +63,7 @@ class EditProductScreen {
     _controllers['tanggal_expired'] = TextEditingController(text: product.tanggal_expired);
 
     // supplier name editable
-    _controllers['supplier_name'] = TextEditingController(text: product.supplier_name ?? '');
+    _controllers['supplier_name'] = TextEditingController(text: product.supplier_name);
 
     return _controllers;
   }
@@ -207,7 +207,7 @@ class EditProductScreen {
         }
       }
     } else {
-      productionFormatted = product.production_date ?? '';
+      productionFormatted = product.production_date;
     }
 
     final updated = ProductModel(
@@ -218,7 +218,7 @@ class EditProductScreen {
       merek_product: controllers['merek_product']!.text.trim(),
       tanggal_beli: tanggalBeliFormatted,
       production_date: productionFormatted,
-      supplier_name: controllers['supplier_name']?.text.trim() ?? product.supplier_name ?? '',
+      supplier_name: controllers['supplier_name']?.text.trim() ?? product.supplier_name,
       harga_product: formatPriceForStorage(controllers['harga_product']!.text),
       // keep existing jumlah_produk (not editable here)
       jumlah_produk: product.jumlah_produk,
@@ -332,7 +332,7 @@ class EditProductScreen {
           // Recompute productKey so masters stay consistent when name/brand/category/productionDate change
           final String prodForKey = updateData.containsKey('productionDate')
             ? (updateData['productionDate'] ?? '')
-            : (product.production_date ?? '');
+            : (product.production_date);
           final String keyName = updated.nama_product.trim().toLowerCase();
           final String keyBrand = updated.merek_product.trim().toLowerCase();
           final String keyCat = updated.kategori_product.trim().toLowerCase();

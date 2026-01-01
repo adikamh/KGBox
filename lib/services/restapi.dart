@@ -61,8 +61,22 @@ class DataService {
               'collection': collection,
               'appid': appid,
             });
+
+            print('insertOne -> POST $uri');
+            print('  body: $body');
+
             final response = await http.post(Uri.parse(uri), body: body).timeout(const Duration(seconds: 15));
-            return response.body;
+
+            print('insertOne response: ${response.statusCode}');
+            print('  body: ${response.body}');
+
+            // Try to parse JSON and return parsed map when possible
+            try {
+               final parsed = json.decode(response.body);
+               return parsed;
+            } catch (_) {
+               return response.body;
+            }
          } catch (e) {
             print('insertOne error: $e');
             rethrow;
