@@ -52,6 +52,7 @@ class DetailProductScreen {
       'productionDate': _formatDate(rawProductDate),
       'expiredRaw': rawExpired,
       'expiredText': _computeExpiredText(rawExpired),
+      'supplierCompany': (product['supplierName'] ?? product['supplier'] ?? product['supplier_name'] ?? product['supplierCompany'] ?? '').toString(),
     };
   }
 
@@ -169,8 +170,10 @@ class DetailProductScreen {
     final raw = product['expiredDate'] ?? product['tanggal_expired'] ?? product['expired'] ?? product['expiredRaw'];
     final dt = _parseDate(raw);
     if (dt == null) return false;
-    final now = DateTime.now();
-    return DateTime(dt.year, dt.month, dt.day).isBefore(DateTime(now.year, now.month, now.day));
+    final today = DateTime.now();
+    final expiredDate = DateTime(dt.year, dt.month, dt.day);
+    final nowDate = DateTime(today.year, today.month, today.day);
+    return expiredDate.isBefore(nowDate) || expiredDate.isAtSameMomentAs(nowDate);
   }
   
   // Check if stock is low (less than 10)
@@ -200,17 +203,27 @@ class DetailProductScreen {
   
   // Get expired status
   String getExpiredStatus() {
-    if (isProductExpired()) {
-      return 'Sudah Expired';
-    }
+    final raw = product['expiredDate'] ?? product['tanggal_expired'] ?? product['expired'] ?? product['expiredRaw'];
+    final dt = _parseDate(raw);
+    if (dt == null) return 'Tanggal expired tidak tersedia';
+    final today = DateTime.now();
+    final expiredDate = DateTime(dt.year, dt.month, dt.day);
+    final nowDate = DateTime(today.year, today.month, today.day);
+    if (expiredDate.isBefore(nowDate)) return 'Sudah Expired';
+    if (expiredDate.isAtSameMomentAs(nowDate)) return 'Expired hari ini';
     return 'Belum Expired';
   }
   
   // Get expired status color
   Color getExpiredStatusColor() {
-    if (isProductExpired()) {
-      return Colors.red;
-    }
+    final raw = product['expiredDate'] ?? product['tanggal_expired'] ?? product['expired'] ?? product['expiredRaw'];
+    final dt = _parseDate(raw);
+    if (dt == null) return Colors.grey;
+    final today = DateTime.now();
+    final expiredDate = DateTime(dt.year, dt.month, dt.day);
+    final nowDate = DateTime(today.year, today.month, today.day);
+    if (expiredDate.isBefore(nowDate)) return Colors.red;
+    if (expiredDate.isAtSameMomentAs(nowDate)) return Colors.orange;
     return Colors.green;
   }
   

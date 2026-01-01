@@ -1,5 +1,6 @@
 // lib/pages/edit_product_page.dart
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../screens/edit_product_screen.dart';
 import '../models/product_model.dart';
 // ignore: depend_on_referenced_packages
@@ -24,6 +25,11 @@ class _EditProductPageState extends State<EditProductPage> {
   late Map<String, TextEditingController> _controllers;
   bool _isLoading = false;
   DateTime? _selectedDate;
+  List<Map<String, dynamic>> _suppliers = [];
+  bool _loadingSuppliers = true;
+  String? _selectedSupplierId;
+  bool _isCategoryOther = false;
+  final TextEditingController _categoryFreeController = TextEditingController();
 
   @override
   void initState() {
@@ -48,12 +54,58 @@ class _EditProductPageState extends State<EditProductPage> {
         }
       }
     }
+    // Initialize suppliers and category state
+    _loadSuppliers();
+    final categories = _controller.getAvailableCategories();
+    final currentCat = _controllers['kategori_product']?.text ?? '';
+    if (currentCat.isNotEmpty && !categories.contains(currentCat)) {
+      _isCategoryOther = true;
+      _categoryFreeController.text = currentCat;
+    }
   }
 
   @override
   void dispose() {
     _controller.disposeControllers();
+    _categoryFreeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSuppliers() async {
+    setState(() => _loadingSuppliers = true);
+    try {
+      final owner = widget.product.ownerid ?? '';
+      final firestore = FirebaseFirestore.instance;
+      Query q = firestore.collection('suppliers');
+      if (owner.isNotEmpty) q = q.where('ownerid', isEqualTo: owner);
+      final snap = await q.get();
+      final items = snap.docs.map((d) {
+        final data = (d.data() as Map<String, dynamic>?) ?? {};
+        return {
+          'id': d.id,
+          'company': data['nama_perusahaan'] ?? data['company'] ?? '',
+          '_raw': {...data, '_docId': d.id},
+        };
+      }).toList();
+
+      setState(() {
+        _suppliers = List<Map<String, dynamic>>.from(items);
+        // try to preselect supplier by matching company name
+        final prodSupplier = _controllers['supplier_name']?.text ?? '';
+        final match = _suppliers.firstWhere((s) => (s['company'] ?? '') == prodSupplier, orElse: () => {});
+        if (match.isNotEmpty) {
+          _selectedSupplierId = match['id'];
+          // ensure supplier_id controller exists
+          _controllers['supplier_id'] = TextEditingController(text: _selectedSupplierId);
+        } else {
+          _selectedSupplierId = '__other__';
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading suppliers in edit page: $e');
+    } finally {
+      setState(() => _loadingSuppliers = false);
+    }
   }
 
   @override
@@ -225,20 +277,69 @@ class _EditProductPageState extends State<EditProductPage> {
             // Price
             _buildPriceField(),
             
-            // Supplier (editable)
-            _buildTextField(
-              label: 'Supplier',
-              controller: _controllers['supplier_name']!,
-              icon: Icons.store_rounded,
-            ),
+            // Supplier (text field with dropdown button)
+            const SizedBox(height: 16),
+            const Text('Supplier', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)),
+            const SizedBox(height: 8),
+            _loadingSuppliers
+                ? const Padding(padding: EdgeInsets.symmetric(vertical:12), child: Center(child: CircularProgressIndicator()))
+                : TextFormField(
+                    controller: _controllers['supplier_name'],
+                    decoration: InputDecoration(
+                      prefixIcon: Icon(Icons.store_rounded, color: Colors.grey[600]),
+                      suffixIcon: IconButton(icon: const Icon(Icons.arrow_drop_down), onPressed: () => _showSupplierPicker(context)),
+                      hintText: 'Pilih atau ketik supplier',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+                    ),
+                    onChanged: (v) {
+                      setState(() {
+                        _selectedSupplierId = '__other__';
+                        if (!_controllers.containsKey('supplier_id')) _controllers['supplier_id'] = TextEditingController(text: '');
+                        _controllers['supplier_id']?.text = '';
+                      });
+                    },
+                  ),
 
-            // Expired Date (read-only, derived from Created Date)
-            _buildTextField(
-              label: 'Tanggal Expired',
-              controller: _controllers['tanggal_expired']!,
-              icon: Icons.calendar_today_rounded,
-              readOnly: true,
-              enabled: false,
+            // Expired Date (editable here)
+            const SizedBox(height: 16),
+            const Text(
+              'Tanggal Expired',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: _selectExpiredDate,
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today_rounded, color: Colors.grey[600]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _controllers['tanggal_expired']!.text.isEmpty
+                            ? 'Pilih tanggal expired'
+                            : _controllers['tanggal_expired']!.text,
+                        style: TextStyle(
+                          color: _controllers['tanggal_expired']!.text.isEmpty ? Colors.grey[400] : Colors.black87,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.calendar_month_rounded, color: Colors.blue[700]),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -335,7 +436,7 @@ class _EditProductPageState extends State<EditProductPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
-        
+
         const Text(
           'Kategori',
           style: TextStyle(
@@ -344,35 +445,25 @@ class _EditProductPageState extends State<EditProductPage> {
             color: Colors.black87,
           ),
         ),
-        
+
         const SizedBox(height: 8),
-        
-        DropdownButtonFormField<String>(
-          initialValue: initialCategory,
+
+        TextFormField(
+          controller: _controllers['kategori_product'],
           decoration: InputDecoration(
             prefixIcon: Icon(Icons.category_rounded, color: Colors.grey[600]),
+            suffixIcon: IconButton(icon: const Icon(Icons.arrow_drop_down), onPressed: () => _showCategoryPicker(context)),
+            hintText: 'Pilih atau ketik kategori',
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey[300]!),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
           ),
-          items: categories.map((category) {
-            return DropdownMenuItem(
-              value: category,
-              child: Text(category),
-            );
-          }).toList(),
-          onChanged: (value) {
-            if (value != null) {
-              _controllers['kategori_product']!.text = value;
-            }
+          onChanged: (v) {
+            // keep controller in sync
+            _controllers['kategori_product']!.text = v;
           },
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Kategori harus dipilih';
-            }
+          validator: (v) {
+            if (v == null || v.trim().isEmpty) return 'Kategori harus dipilih';
             return null;
           },
         ),
@@ -463,6 +554,90 @@ class _EditProductPageState extends State<EditProductPage> {
     }
   }
 
+  Future<void> _selectExpiredDate() async {
+    final initial = () {
+      try {
+        final txt = _controllers['tanggal_expired']?.text ?? '';
+        if (txt.isEmpty) return DateTime.now();
+        try {
+          return DateTime.parse(txt);
+        } catch (_) {}
+        try {
+          return DateFormat('dd/MM/yyyy').parse(txt);
+        } catch (_) {}
+        try {
+          return DateFormat('MMMM d, yyyy').parse(txt);
+        } catch (_) {}
+        return DateTime.now();
+      } catch (_) {
+        return DateTime.now();
+      }
+    }();
+
+    final picked = await _controller.selectDate(context, initialDate: initial);
+    if (picked != null) {
+      setState(() {
+        // store in yyyy-MM-dd for consistency with Firestore storage
+        _controllers['tanggal_expired']!.text = '${picked.year}-${picked.month.toString().padLeft(2,'0')}-${picked.day.toString().padLeft(2,'0')}';
+      });
+    }
+  }
+
+  Future<void> _showCategoryPicker(BuildContext ctx) async {
+    final items = _controller.getAvailableCategories();
+    final chosen = await showModalBottomSheet<String?>(
+      context: ctx,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (c) {
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemBuilder: (_, i) => ListTile(
+            title: Text(items[i], overflow: TextOverflow.ellipsis),
+            onTap: () => Navigator.pop(c, items[i]),
+          ),
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemCount: items.length,
+        );
+      },
+    );
+    if (chosen != null) {
+      setState(() {
+        _controllers['kategori_product']!.text = chosen;
+      });
+    }
+  }
+
+  Future<void> _showSupplierPicker(BuildContext ctx) async {
+    if (_loadingSuppliers) return;
+    final chosen = await showModalBottomSheet<Map<String, dynamic>?>(
+      context: ctx,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (c) {
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemBuilder: (_, i) {
+            final s = _suppliers[i];
+            return ListTile(
+              title: Text(s['company'] ?? '', overflow: TextOverflow.ellipsis),
+              onTap: () => Navigator.pop(c, s),
+            );
+          },
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemCount: _suppliers.length,
+        );
+      },
+    );
+    if (chosen != null) {
+      setState(() {
+        _selectedSupplierId = chosen['id']?.toString();
+        _controllers['supplier_name']?.text = chosen['company'] ?? '';
+        final sid = _selectedSupplierId ?? '';
+        if (!_controllers.containsKey('supplier_id')) _controllers['supplier_id'] = TextEditingController(text: sid);
+        else _controllers['supplier_id']?.text = sid;
+      });
+    }
+  }
+
   Widget _buildPriceField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -484,8 +659,8 @@ class _EditProductPageState extends State<EditProductPage> {
           controller: _controllers['harga_product'],
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
-            prefixIcon: Icon(Icons.attach_money_rounded, color: Colors.grey[600]),
-            suffixText: 'IDR',
+            prefixText: 'Rp. ',
+            prefixStyle: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.w600),
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(

@@ -52,6 +52,93 @@ class _DetailProductPageState extends State<DetailProductPage> {
     }
   }
 
+  Future<void> _pickAndSaveExpiredDate(Map<String, dynamic> product) async {
+    try {
+      final rawExpired = product['expiredRaw'] ?? product['expiredDate'] ?? product['tanggal_expired'];
+      DateTime initial = DateTime.now();
+      final parsed = _localParseDate(rawExpired);
+      if (parsed != null) initial = parsed;
+
+      final picked = await showDatePicker(
+        context: navigatorKeyCurrentContext(),
+        initialDate: initial,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2100),
+      );
+      if (picked == null) return;
+
+      // Format as yyyy-MM-dd string for storage
+      final formatted = '${picked.year}-${picked.month.toString().padLeft(2,'0')}-${picked.day.toString().padLeft(2,'0')}';
+
+      final productId = (product['id'] ?? product['productId'] ?? product['id_product'] ?? '').toString();
+      if (productId.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak dapat menentukan ID produk untuk menyimpan expired')));
+        return;
+      }
+
+      await _firestore.collection('products').doc(productId).update({'expiredDate': formatted});
+
+      // update local product map and controller
+      product['expiredRaw'] = formatted;
+      product['expiredText'] = _computeExpiredTextLocal(formatted);
+      // reinitialize controller data
+      _controller.initialize(product);
+
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tanggal expired berhasil diperbarui')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menyimpan tanggal expired: $e')));
+    }
+  }
+
+  BuildContext navigatorKeyCurrentContext() {
+    // try to find a context to use for showDatePicker; fall back to this state's context
+    return context;
+  }
+
+  DateTime? _localParseDate(dynamic v) {
+    if (v == null) return null;
+    try {
+      if (v is DateTime) return v;
+      if (v is Timestamp) return v.toDate();
+      if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+      if (v is String) {
+        final s = v.trim();
+        if (RegExp(r"^\d{4}-\d{2}-\d{2}").hasMatch(s)) {
+          return DateTime.parse(s);
+        }
+        return DateTime.tryParse(s);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _computeExpiredTextLocal(dynamic rawExpired) {
+    final dt = _localParseDate(rawExpired);
+    if (dt == null) return '-';
+    final now = DateTime.now();
+    final end = DateTime(dt.year, dt.month, dt.day);
+    final diff = end.difference(DateTime(now.year, now.month, now.day)).inDays;
+    if (diff < 0) return 'Sudah expired';
+    if (diff == 0) return 'Expired hari ini';
+    if (diff <= 14) {
+      if (diff % 7 == 0) {
+        final weeks = (diff / 7).round();
+        return 'Expired dalam $weeks minggu';
+      }
+      return 'Expired dalam $diff hari';
+    }
+    // fallback formatted
+    final d = dt.toLocal();
+    const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    final day = d.day.toString().padLeft(2, '0');
+    final month = months[d.month - 1];
+    final year = d.year.toString();
+    return '$day $month $year';
+  }
+
   @override
   Widget build(BuildContext context) {
     final formattedProduct = _controller.getFormattedProduct();
@@ -250,9 +337,9 @@ class _DetailProductPageState extends State<DetailProductPage> {
                     label: 'Expired',
                     color: Colors.red,
                   ),
-                
+
                 if (isExpired && isStockLow) const SizedBox(width: 8),
-                
+
                 if (isStockLow)
                   _buildStatusBadge(
                     label: 'Stok Rendah',
@@ -460,12 +547,17 @@ class _DetailProductPageState extends State<DetailProductPage> {
             const Divider(height: 32),
 
             _buildDetailRow(
-              icon: Icons.calendar_today_rounded,
-              label: 'Tanggal Expired',
-              value: product['expiredText']?.toString() ?? '-',
-              valueColor: controller.getExpiredStatusColor(),
-              showStatus: true,
-              statusText: controller.getExpiredStatus(),
+              icon: Icons.store_rounded,
+              label: 'Supplier',
+              value: product['supplierCompany']?.toString() ?? '-',
+            ),
+
+            const Divider(height: 32),
+
+            // Expired date: editable
+            _buildExpiredRow(
+              controller: controller,
+              product: product,
             ),
           ],
         ),
@@ -558,6 +650,65 @@ class _DetailProductPageState extends State<DetailProductPage> {
     );
   }
 
+  Widget _buildExpiredRow({
+    required DetailProductScreen controller,
+    required Map<String, dynamic> product,
+  }) {
+    // Use server value for expired date and format it for display.
+    final raw = product['expiredRaw'] ?? product['expiredDate'] ?? product['tanggal_expired'] ?? '';
+    final parsed = _localParseDate(raw);
+    String display;
+    if (parsed != null) {
+      final d = parsed.toLocal();
+      const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+      display = '${d.day.toString().padLeft(2,'0')} ${months[d.month - 1]} ${d.year}';
+    } else if (raw is String && raw.toString().isNotEmpty) {
+      display = raw.toString();
+    } else {
+      display = '-';
+    }
+
+    final Color textColor = Colors.black87;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(Icons.calendar_today_rounded, size: 18, color: Colors.grey[700]),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Tanggal Expired',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w500, letterSpacing: 0.2),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      display,
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor, height: 1.4),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildActionButtons(
     BuildContext context,
     DetailProductScreen controller,
@@ -637,33 +788,118 @@ class _DetailProductPageState extends State<DetailProductPage> {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada barcode/unit yang dapat dihapus')));
                       return;
                     }
-                    String? selected = _barcodes.length == 1 ? _barcodes.first['barcode']?.toString() : null;
-                    final pick = await showDialog<String?>(
+
+                    final pick = await showDialog<List<String>?>(
                       context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Pilih Barcode untuk dihapus'),
-                        content: SizedBox(
-                          width: double.maxFinite,
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: _barcodes.length,
-                            itemBuilder: (c, i) {
-                              final v = _barcodes[i]['barcode']?.toString() ?? '';
-                              return RadioListTile<String>(
-                                value: v,
-                                groupValue: selected,
-                                title: Text(v),
-                                onChanged: (val) { selected = val; Navigator.of(ctx).pop(val); },
-                              );
-                            },
-                          ),
-                        ),
-                        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal'))],
-                      ),
+                      builder: (ctx) {
+                        final TextEditingController searchCtrl = TextEditingController();
+                        List<String> filtered = _barcodes.map((e) => e['barcode']?.toString() ?? '').toList();
+                        final Set<String> selectedSet = {};
+
+                        return StatefulBuilder(builder: (ctx2, setState2) {
+                          void applyFilter(String q) {
+                            final qq = q.trim().toLowerCase();
+                            filtered = qq.isEmpty
+                                ? _barcodes.map((e) => e['barcode']?.toString() ?? '').toList()
+                                : _barcodes.map((e) => e['barcode']?.toString() ?? '').where((e) => e.toLowerCase().contains(qq)).toList();
+                          }
+
+                          return AlertDialog(
+                            title: const Text('Pilih Barcode untuk dihapus'),
+                            content: SizedBox(
+                              width: double.maxFinite,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TextField(
+                                    controller: searchCtrl,
+                                    decoration: InputDecoration(
+                                      hintText: 'Cari barcode...',
+                                      prefixIcon: const Icon(Icons.search),
+                                      suffixIcon: searchCtrl.text.isNotEmpty
+                                          ? IconButton(icon: const Icon(Icons.close), onPressed: () { searchCtrl.clear(); applyFilter(''); setState2(() {}); })
+                                          : null,
+                                    ),
+                                    onChanged: (v) { applyFilter(v); setState2(() {}); },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Select-all header
+                                  Builder(builder: (ctx3) {
+                                    final allSelected = filtered.isNotEmpty && filtered.every((e) => selectedSet.contains(e));
+                                    return Row(
+                                      children: [
+                                        Checkbox(
+                                          value: allSelected,
+                                          onChanged: (val) {
+                                            setState2(() {
+                                              if (val == true) {
+                                                selectedSet.addAll(filtered);
+                                              } else {
+                                                for (final f in filtered) selectedSet.remove(f);
+                                              }
+                                            });
+                                          },
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Expanded(child: Text('Pilih Semua', style: TextStyle(fontWeight: FontWeight.w600))),
+                                        TextButton(
+                                          onPressed: () {
+                                            setState2(() {
+                                              if (allSelected) {
+                                                for (final f in filtered) selectedSet.remove(f);
+                                              } else {
+                                                selectedSet.addAll(filtered);
+                                              }
+                                            });
+                                          },
+                                          child: Text(allSelected ? 'Batal' : 'Pilih Semua'),
+                                        ),
+                                      ],
+                                    );
+                                  }),
+                                  const SizedBox(height: 8),
+                                  Expanded(
+                                    child: filtered.isEmpty
+                                        ? const Center(child: Text('Tidak ditemukan'))
+                                        : ListView.builder(
+                                            shrinkWrap: true,
+                                            itemCount: filtered.length,
+                                            itemBuilder: (c, i) {
+                                              final v = filtered[i];
+                                              final checked = selectedSet.contains(v);
+                                              return CheckboxListTile(
+                                                value: checked,
+                                                title: Text(v),
+                                                controlAffinity: ListTileControlAffinity.leading,
+                                                onChanged: (val) {
+                                                  setState2(() {
+                                                    if (val == true) selectedSet.add(v); else selectedSet.remove(v);
+                                                  });
+                                                },
+                                              );
+                                            },
+                                          ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Batal')),
+                              ElevatedButton(
+                                onPressed: selectedSet.isEmpty ? null : () => Navigator.pop(ctx, selectedSet.toList()),
+                                child: const Text('Hapus Terpilih'),
+                              ),
+                            ],
+                          );
+                        });
+                      },
                     );
-                    if (pick == null) return;
-                    try { await FirebaseFirestore.instance.collection('product_barcodes').doc(pick).delete(); } catch (_) {}
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barcode berhasil dihapus')));
+
+                    if (pick == null || pick.isEmpty) return;
+                    for (final code in pick) {
+                      try { await FirebaseFirestore.instance.collection('product_barcodes').doc(code).delete(); } catch (_) {}
+                    }
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${pick.length} barcode berhasil dihapus')));
                     await _loadBarcodes();
                     Navigator.of(context).pop(true);
                     return;

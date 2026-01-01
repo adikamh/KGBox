@@ -1,5 +1,6 @@
 // lib/pages/list_product_page.dart
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/restapi.dart';
@@ -17,17 +18,39 @@ class ListProductPage extends StatefulWidget {
 class _ListProductPageState extends State<ListProductPage> {
   final ListProductScreen _controller = ListProductScreen();
   final TextEditingController _searchController = TextEditingController();
+  StreamSubscription<QuerySnapshot>? _productsSub;
   
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadProducts();
+      _setupRealtimeListener();
     });
+  }
+
+  void _setupRealtimeListener() {
+    // Cancel existing if any
+    _productsSub?.cancel();
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser;
+      final ownerId = user?.ownerId ?? user?.id;
+      Query q = FirebaseFirestore.instance.collection('products');
+      if (ownerId != null && ownerId.toString().isNotEmpty) {
+        q = q.where('ownerId', isEqualTo: ownerId);
+      }
+      _productsSub = q.snapshots().listen((_) async {
+        if (mounted) await _loadProducts();
+      });
+    } catch (e) {
+      debugPrint('Realtime listener error: $e');
+    }
   }
 
   @override
   void dispose() {
+    _productsSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -336,18 +359,6 @@ class _ListProductPageState extends State<ListProductPage> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                icon: Icon(Icons.edit_rounded, color: Colors.blue, size: 20),
-                                tooltip: 'Edit produk',
-                                onPressed: () async {
-                                  final res = await _controller.navigateToEdit(context, product);
-                                  if (res != null) {
-                                    // reload list after edit
-                                    await _loadProducts();
-                                    if (mounted) setState(() {});
-                                  }
-                                },
-                              ),
                               PopupMenuButton<int>(
                                 icon: Icon(
                                   Icons.more_vert_rounded,
@@ -387,7 +398,8 @@ class _ListProductPageState extends State<ListProductPage> {
                                       if (mounted) setState(() {});
                                     }
                                   } else if (value == 2) {
-                                    await _handleDeleteProduct(product);
+                                    // Directly delete the whole product (master + barcodes) with confirmation
+                                    await _deleteAllProductFromList(product);
                                   }
                                 },
                               ),
@@ -639,88 +651,246 @@ class _ListProductPageState extends State<ListProductPage> {
     final firestore = FirebaseFirestore.instance;
     final api = DataService();
 
-    // Build list of unit ids/barcodes from product['full']
+    // Build list of unit ids/barcodes from product['full'] (support nested lists/maps)
     final List<String> unitIds = [];
     final full = product['full'];
-    if (full is List) {
-      for (final u in full) {
-        if (u is Map) {
-          final id = (u['id_product'] ?? u['id'] ?? u['_id'] ?? u['kode'] ?? u['barcode'] ?? '').toString();
-          if (id.isNotEmpty && !unitIds.contains(id)) unitIds.add(id);
-        }
+    void collectIds(dynamic node) {
+      if (node == null) return;
+      if (node is String) {
+        final s = node.trim();
+        if (s.isNotEmpty && !unitIds.contains(s)) unitIds.add(s);
+        return;
       }
-    } else if (full is Map) {
-      final id = (full['id_product'] ?? full['id'] ?? full['_id'] ?? full['kode'] ?? full['barcode'] ?? '').toString();
-      if (id.isNotEmpty) unitIds.add(id);
+      if (node is Map) {
+        final id = (node['id_product'] ?? node['id'] ?? node['_id'] ?? node['kode'] ?? node['barcode'] ?? node['idProduct'] ?? '').toString();
+        if (id.isNotEmpty && !unitIds.contains(id)) unitIds.add(id);
+        return;
+      }
+      if (node is List) {
+        for (final e in node) collectIds(e);
+      }
     }
 
+    collectIds(full);
+
     if (choice == 'single') {
-      // Ask which barcode to delete
+      // Ask which barcode(s) to delete — provide search + checkbox UI
       if (unitIds.isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada barcode/unit yang dapat dihapus')));
         return;
       }
-      String? selected = unitIds.length == 1 ? unitIds.first : null;
-      final pick = await showDialog<String?>(
+
+      final pick = await showDialog<List<String>?>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Pilih Barcode untuk dihapus'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: unitIds.length,
-              itemBuilder: (c, i) {
-                final v = unitIds[i];
-                return RadioListTile<String>(
-                  value: v,
-                  groupValue: selected,
-                  title: Text(v),
-                  onChanged: (val) { selected = val; Navigator.of(ctx).pop(val); },
-                );
-              },
-            ),
-          ),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal'))],
-        ),
+        builder: (ctx) {
+          final TextEditingController searchCtrl = TextEditingController();
+          List<String> filtered = List<String>.from(unitIds);
+          final Set<String> selectedSet = {};
+
+          return StatefulBuilder(builder: (ctx2, setState2) {
+            void applyFilter(String q) {
+              final qq = q.trim().toLowerCase();
+              filtered = qq.isEmpty ? List<String>.from(unitIds) : unitIds.where((e) => e.toLowerCase().contains(qq)).toList();
+            }
+
+            return AlertDialog(
+              title: const Text('Pilih Barcode untuk dihapus'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: searchCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Cari barcode...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: searchCtrl.text.isNotEmpty
+                            ? IconButton(icon: const Icon(Icons.close), onPressed: () { searchCtrl.clear(); applyFilter(''); setState2(() {}); })
+                            : null,
+                      ),
+                      onChanged: (v) { applyFilter(v); setState2(() {}); },
+                    ),
+                    const SizedBox(height: 8),
+                    // Header with "Pilih Semua" checkbox for the current filtered results
+                    Builder(builder: (ctx3) {
+                      final allSelected = filtered.isNotEmpty && filtered.every((e) => selectedSet.contains(e));
+                      return Row(
+                        children: [
+                          Checkbox(
+                            value: allSelected,
+                            onChanged: (val) {
+                              setState2(() {
+                                if (val == true) {
+                                  selectedSet.addAll(filtered);
+                                } else {
+                                  for (final f in filtered) selectedSet.remove(f);
+                                }
+                              });
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(child: Text('Pilih Semua', style: TextStyle(fontWeight: FontWeight.w600))),
+                          TextButton(
+                            onPressed: () {
+                              setState2(() {
+                                if (allSelected) {
+                                  for (final f in filtered) selectedSet.remove(f);
+                                } else {
+                                  selectedSet.addAll(filtered);
+                                }
+                              });
+                            },
+                            child: Text(allSelected ? 'Batal' : 'Pilih Semua'),
+                          ),
+                        ],
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? const Center(child: Text('Tidak ditemukan'))
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              itemBuilder: (c, i) {
+                                final v = filtered[i];
+                                final checked = selectedSet.contains(v);
+                                return CheckboxListTile(
+                                  value: checked,
+                                  title: Text(v),
+                                  controlAffinity: ListTileControlAffinity.leading,
+                                  onChanged: (val) {
+                                    setState2(() {
+                                      if (val == true) selectedSet.add(v); else selectedSet.remove(v);
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Batal')),
+                ElevatedButton(
+                  onPressed: selectedSet.isEmpty ? null : () => Navigator.pop(ctx, selectedSet.toList()),
+                  child: const Text('Hapus Terpilih'),
+                ),
+              ],
+            );
+          });
+        },
       );
 
-      if (pick == null) return;
+      if (pick == null || pick.isEmpty) return;
 
-      // Delete single barcode from Firestore and attempt server delete
-      try {
-        await firestore.collection('product_barcodes').doc(pick).delete();
-      } catch (_) {}
-      try {
-        await api.removeId(token, project, collection, appid, pick);
-      } catch (_) {}
+      // Delete selected barcodes from Firestore and attempt server delete for each
+      for (final barcode in pick) {
+        try { await firestore.collection('product_barcodes').doc(barcode).delete(); } catch (_) {}
+        try { await api.removeId(token, project, collection, appid, barcode); } catch (_) {}
+      }
 
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barcode berhasil dihapus')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${pick.length} barcode berhasil dihapus')));
       await _refreshProducts();
       return;
     }
 
     // choice == 'all' -> delete product record and all related barcode documents
+    final confirmAll = await _controller.showDeleteConfirmation(context, product['name']);
+    if (confirmAll != true) return;
+
+    // Determine masterId robustly
+    String masterId = '';
+    if (product['id'] != null && product['id'].toString().isNotEmpty) {
+      masterId = product['id'].toString();
+    } else {
+      final full = product['full'];
+      void extract(dynamic node) {
+        if (masterId.isNotEmpty) return;
+        if (node == null) return;
+        if (node is String) { if (node.isNotEmpty) masterId = node; return; }
+        if (node is Map) {
+          final id = (node['id_product'] ?? node['id'] ?? node['_id'] ?? node['productId'] ?? '').toString();
+          if (id.isNotEmpty) { masterId = id; return; }
+          return;
+        }
+        if (node is List) {
+          for (final e in node) { extract(e); if (masterId.isNotEmpty) break; }
+        }
+      }
+      extract(full);
+    }
+
+    if (masterId.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal menentukan ID produk untuk dihapus')));
+      return;
+    }
+
+    final serverResultAll = await _controller.deleteProduct(masterId);
+    try {
+      try { await firestore.collection('products').doc(masterId).delete(); } catch (_) {}
+      final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: masterId).get();
+      for (final d in q.docs) {
+        try { await d.reference.delete(); } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('Error deleting Firestore docs: $e');
+    }
+
+    if (!mounted) return;
+    if (serverResultAll['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(serverResultAll['message'] ?? 'Produk dihapus'), backgroundColor: Colors.green[600]));
+      await _refreshProducts();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(serverResultAll['message'] ?? 'Gagal menghapus'), backgroundColor: Colors.red[600]));
+    }
+    return;
+  }
+
+  // Delete entire product (master + all barcode docs) — used by popup menu 'Hapus'
+  Future<void> _deleteAllProductFromList(Map<String, dynamic> product) async {
     final confirm = await _controller.showDeleteConfirmation(context, product['name']);
     if (confirm != true) return;
 
-    final serverResult = await _controller.deleteProduct(product['id']);
-    // Attempt to delete Firestore product doc(s) and barcode docs
-    try {
-      // Determine possible product master id from first unit
-      String masterId = '';
-      if (full is List && full.isNotEmpty && full.first is Map) {
-        final fm = full.first as Map<String, dynamic>;
-        masterId = (fm['id_product'] ?? fm['id'] ?? fm['_id'] ?? '').toString();
-      }
-      if (masterId.isNotEmpty) {
-        // delete master product doc
-        try { await firestore.collection('products').doc(masterId).delete(); } catch (_) {}
-        // delete all barcode docs with productId == masterId
-        final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: masterId).get();
-        for (final d in q.docs) {
-          try { await d.reference.delete(); } catch (_) {}
+    final firestore = FirebaseFirestore.instance;
+
+    // Determine masterId robustly
+    String masterId = '';
+    if (product['id'] != null && product['id'].toString().isNotEmpty) {
+      masterId = product['id'].toString();
+    } else {
+      final full = product['full'];
+      void extract(dynamic node) {
+        if (masterId.isNotEmpty) return;
+        if (node == null) return;
+        if (node is String) { if (node.isNotEmpty) masterId = node; return; }
+        if (node is Map) {
+          final id = (node['id_product'] ?? node['id'] ?? node['_id'] ?? node['productId'] ?? '').toString();
+          if (id.isNotEmpty) { masterId = id; return; }
+          return;
         }
+        if (node is List) {
+          for (final e in node) { extract(e); if (masterId.isNotEmpty) break; }
+        }
+      }
+      extract(full);
+    }
+
+    if (masterId.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal menentukan ID produk untuk dihapus')));
+      return;
+    }
+
+    final serverResult = await _controller.deleteProduct(masterId);
+
+    // Remove Firestore master and barcodes for the found masterId
+    try {
+      try { await firestore.collection('products').doc(masterId).delete(); } catch (_) {}
+      final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: masterId).get();
+      for (final d in q.docs) {
+        try { await d.reference.delete(); } catch (_) {}
       }
     } catch (e) {
       debugPrint('Error deleting Firestore docs: $e');
@@ -728,11 +898,10 @@ class _ListProductPageState extends State<ListProductPage> {
 
     if (!mounted) return;
     if (serverResult['success'] == true) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(serverResult['message'] ?? 'Produk dihapus'), backgroundColor: Colors.green[600]));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(serverResult['message'] ?? 'Produk dihapus'), backgroundColor: Colors.green[600]));
       await _refreshProducts();
     } else {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(serverResult['message'] ?? 'Gagal menghapus'), backgroundColor: Colors.red[600]));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(serverResult['message'] ?? 'Gagal menghapus'), backgroundColor: Colors.red[600]));
     }
-    return;
   }
 }

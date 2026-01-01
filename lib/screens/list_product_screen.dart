@@ -304,11 +304,42 @@ class ListProductScreen {
       target['harga_product'] = product['price'].toString();
     }
 
-     final result = await Navigator.push<Map<String, dynamic>?>(
-       context,
-       MaterialPageRoute(
-         builder: (_) => EditProductPage(product: ProductModel.fromJson(target)),
-       ),
+    // Build a normalized map compatible with ProductModel.fromJson
+    final Map<String, dynamic> normalized = {
+      'id': target['id'] ?? product['id'] ?? '',
+      'id_product': target['id_product'] ?? target['id'] ?? product['id'] ?? '',
+      'nama_product': target['nama_product'] ?? target['name'] ?? target['nama'] ?? product['name'] ?? '',
+      'kategori_product': target['kategori_product'] ?? target['category'] ?? product['category'] ?? '',
+      'merek_product': target['merek_product'] ?? target['brand'] ?? product['brand'] ?? '',
+      // Prefer Firestore `createdAt` for purchase date and format as dd/MM/yyyy
+      'tanggal_beli': (() {
+        final createdRaw = target['createdAt'] ?? target['created_at'] ?? product['createdAt'] ?? product['created_at'] ?? target['purchaseDate'];
+        DateTime? dt;
+        if (createdRaw is Timestamp) dt = createdRaw.toDate();
+        else if (createdRaw is DateTime) dt = createdRaw;
+        else if (createdRaw is String && createdRaw.isNotEmpty) dt = DateTime.tryParse(createdRaw);
+        if (dt != null) {
+          final d = dt.day.toString().padLeft(2, '0');
+          final m = dt.month.toString().padLeft(2, '0');
+          final y = dt.year.toString();
+          return '$d/$m/$y';
+        }
+        return target['tanggal_beli'] ?? target['purchaseDate']?.toString() ?? '';
+      })(),
+      'productionDate': target['productionDate'] ?? target['production_date'] ?? target['tanggal_produksi'] ?? '',
+      'harga_product': target['harga_product'] ?? target['price']?.toString() ?? product['price']?.toString() ?? '0',
+      'jumlah_produk': target['jumlah_produk'] ?? product['stock']?.toString() ?? target['stock']?.toString() ?? '0',
+      'barcode_list': target['barcode_list'] ?? target['kode_barcodes'] ?? target['barcode_list_json'] ?? [],
+      'tanggal_expired': target['tanggal_expired'] ?? target['expiredDate'] ?? product['expired'] ?? '',
+      'supplierName': target['supplierName'] ?? target['supplier_name'] ?? product['supplierName'] ?? product['supplier_name'] ?? '',
+      'ownerid': target['ownerid'] ?? product['ownerId'] ?? product['ownerid'] ?? '',
+    };
+
+    final result = await Navigator.push<Map<String, dynamic>?>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditProductPage(product: ProductModel.fromJson(normalized)),
+      ),
     );
     return result;
   }

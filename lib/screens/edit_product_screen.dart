@@ -269,13 +269,36 @@ class EditProductScreen {
         }
       }
 
-      // Compute new expiredDate if original delta exists
-      if (originalCreated != null && originalExpired != null && newCreated != null) {
+      // Determine expiredDate to store. Prefer explicit value from form if provided.
+      String? explicitExpired = controllers['tanggal_expired']?.text.trim();
+      String? normalizedExpired;
+      if (explicitExpired != null && explicitExpired.isNotEmpty) {
+        // Try to normalize to yyyy-MM-dd
+        try {
+          DateTime p = DateTime.parse(explicitExpired);
+          normalizedExpired = '${p.year}-${p.month.toString().padLeft(2,'0')}-${p.day.toString().padLeft(2,'0')}';
+        } catch (_) {
+          try {
+            final p2 = DateFormat('dd/MM/yyyy').parse(explicitExpired);
+            normalizedExpired = '${p2.year}-${p2.month.toString().padLeft(2,'0')}-${p2.day.toString().padLeft(2,'0')}';
+          } catch (_) {
+            try {
+              final p3 = DateFormat('MMMM d, yyyy').parse(explicitExpired);
+              normalizedExpired = '${p3.year}-${p3.month.toString().padLeft(2,'0')}-${p3.day.toString().padLeft(2,'0')}';
+            } catch (_) {
+              // fallback to raw input
+              normalizedExpired = explicitExpired;
+            }
+          }
+        }
+      }
+
+      if (normalizedExpired != null && normalizedExpired.isNotEmpty) {
+        updateData['expiredDate'] = normalizedExpired;
+      } else if (originalCreated != null && originalExpired != null && newCreated != null) {
         final diff = originalExpired.difference(originalCreated);
         final newExpired = newCreated.add(diff);
         updateData['expiredDate'] = '${newExpired.year}-${newExpired.month.toString().padLeft(2,'0')}-${newExpired.day.toString().padLeft(2,'0')}';
-      } else if (controllers['tanggal_expired'] != null && controllers['tanggal_expired']!.text.trim().isNotEmpty) {
-        updateData['expiredDate'] = controllers['tanggal_expired']!.text.trim();
       }
 
       // Optional supplier fields if present in controllers
@@ -316,7 +339,9 @@ class EditProductScreen {
           updateData['productKey'] = productKey;
 
       // Perform Firestore update
+      debugPrint('Updating product docId=$docId with: $updateData');
       await firestore.collection('products').doc(docId).update(updateData);
+      debugPrint('Update complete for docId=$docId');
 
       return {'success': true, 'message': 'Produk berhasil diperbarui', 'product': updated.toJson()};
     } catch (e) {

@@ -1,8 +1,8 @@
 // lib/pages/add_product_page.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../screens/tambah_product_screen.dart';
-import '../services/restapi.dart';
 import '../services/config.dart';
 
 class AddProductPage extends StatefulWidget {
@@ -33,6 +33,7 @@ class _AddProductPageState extends State<AddProductPage> {
   final TextEditingController _hargaController = TextEditingController();
   final TextEditingController _productionDateController = TextEditingController();
   final TextEditingController _tanggalExpiredController = TextEditingController();
+  final TextEditingController _categoryFreeController = TextEditingController();
   List<Map<String, dynamic>> _suppliers = [];
   bool _loadingSuppliers = true;
   String? _selectedSupplierId;
@@ -159,6 +160,7 @@ class _AddProductPageState extends State<AddProductPage> {
   void dispose() {
     _productionDateController.dispose();
     _supplierFreeController.dispose();
+    _categoryFreeController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -166,40 +168,20 @@ class _AddProductPageState extends State<AddProductPage> {
   Future<void> _loadSuppliers() async {
     setState(() => _loadingSuppliers = true);
     try {
-      final api = DataService();
-      // try to get ownerId from controller if available
       final owner = _controller.ownerId ?? '';
-      dynamic res;
-      if (owner.isNotEmpty) {
-        res = await api.selectWhere(token, project, 'suppliers', appid, 'ownerid', owner);
-      } else {
-        res = await api.selectAll(token, project, 'suppliers', appid);
-      }
-      final decoded = res is String ? (res.trim().isEmpty ? [] : json.decode(res)) : res;
-      final rawList = (decoded is Map) ? (decoded['data'] ?? []) : (decoded is List ? decoded : []);
-      final items = List<Map<String, dynamic>>.from(rawList);
-      final mapped = items.map((item) {
-        // extract id
-        String id = '';
-        try {
-          final rawId = item['_id'] ?? item['id'] ?? '';
-          if (rawId is Map) {
-            if (rawId.containsKey('\$oid')) id = rawId['\$oid'].toString();
-            else if (rawId.containsKey('\$oid')) id = rawId['\$oid'].toString();
-            else id = rawId.toString();
-          } else {
-            id = rawId?.toString() ?? '';
-          }
-        } catch (_) {}
+      final firestore = FirebaseFirestore.instance;
+      Query q = firestore.collection('suppliers');
+      if (owner.isNotEmpty) q = q.where('ownerid', isEqualTo: owner);
+      final snap = await q.get();
+      final mapped = snap.docs.map((d) {
+        final data = (d.data() as Map<String, dynamic>?) ?? {};
         return {
-          'id': id,
-          'company': item['nama_perusahaan'] ?? item['company'] ?? '',
-          '_raw': item,
+          'id': d.id,
+          'company': data['nama_perusahaan'] ?? data['company'] ?? '',
+          '_raw': {...data, '_docId': d.id},
         };
       }).toList();
-      setState(() {
-        _suppliers = mapped;
-      });
+      setState(() => _suppliers = List<Map<String, dynamic>>.from(mapped));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal memuat supplier: $e')));
     } finally {
@@ -568,44 +550,95 @@ class _AddProductPageState extends State<AddProductPage> {
               ),
             ],
           ),
-          child: DropdownButtonFormField<String>(
-            value: _selectedCategory,
-            decoration: InputDecoration(
-              prefixIcon: Icon(Icons.category_rounded, color: Colors.blue[700]),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey[200]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
-              ),
-              filled: true,
-              fillColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Column(
+              children: [
+                TextFormField(
+                  controller: _categoryFreeController,
+                  decoration: InputDecoration(
+                    prefixIcon: Icon(Icons.category_rounded, color: Colors.blue[700]),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.arrow_drop_down),
+                      onPressed: () => _showCategoryPicker(context),
+                    ),
+                    hintText: 'Pilih atau ketik kategori',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  onChanged: (v) {
+                    _selectedCategory = v;
+                    _controller.selectedCategory = v;
+                    _controller.updateProductCode();
+                  },
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Kategori wajib diisi';
+                    return null;
+                  },
+                ),
+              ],
             ),
-            items: _controller.categories
-                .map((c) => DropdownMenuItem(
-                      value: c,
-                      child: Text(c),
-                    ))
-                .toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _selectedCategory = value;
-                  _controller.selectedCategory = value;
-                  _controller.updateProductCode();
-                });
-              }
-            },
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _showCategoryPicker(BuildContext ctx) async {
+    final items = _controller.categories;
+    final chosen = await showModalBottomSheet<String?>(
+      context: ctx,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (c) {
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemBuilder: (_, i) => ListTile(
+            title: Text(items[i], overflow: TextOverflow.ellipsis),
+            onTap: () => Navigator.pop(c, items[i]),
+          ),
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemCount: items.length,
+        );
+      },
+    );
+    if (chosen != null) {
+      setState(() {
+        _categoryFreeController.text = chosen;
+        _selectedCategory = chosen;
+        _controller.selectedCategory = chosen;
+        _controller.updateProductCode();
+      });
+    }
+  }
+
+  Future<void> _showSupplierPicker(BuildContext ctx) async {
+    if (_loadingSuppliers) return;
+    final chosen = await showModalBottomSheet<Map<String, dynamic>?>(
+      context: ctx,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (c) {
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemBuilder: (_, i) {
+            final s = _suppliers[i];
+            return ListTile(
+              title: Text(s['company'] ?? '', overflow: TextOverflow.ellipsis),
+              onTap: () => Navigator.pop(c, s),
+            );
+          },
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemCount: _suppliers.length,
+        );
+      },
+    );
+    if (chosen != null) {
+      setState(() {
+        _selectedSupplierId = chosen['id']?.toString();
+        _supplierSaved = true;
+        _supplierFreeController.text = chosen['company'] ?? '';
+      });
+    }
   }
 
   Widget _buildSupplierField() {
@@ -624,46 +657,48 @@ class _AddProductPageState extends State<AddProductPage> {
               children: [
                 _loadingSuppliers
                   ? const Padding(padding: EdgeInsets.symmetric(vertical:12), child: Center(child: CircularProgressIndicator()))
-                  : DropdownButtonFormField<String>(
-                      value: _selectedSupplierId,
-                      decoration: InputDecoration(prefixIcon: Icon(Icons.business, color: Colors.blue[700]), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), filled: true, fillColor: Colors.white),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('Pilih supplier (opsional)')),
-                        ..._suppliers.map((s) => DropdownMenuItem(value: s['id'] ?? '', child: Text(s['company'] ?? ''))),
-                        const DropdownMenuItem(value: '__other__', child: Text('Lainnya / Masukkan manual')),
-                      ],
-                      onChanged: (v) {
-                        setState(() {
-                          _selectedSupplierId = v;
-                          _supplierSaved = (v != '__other__' && v != null);
-                        });
-                      },
-                    ),
-                if (_selectedSupplierId == '__other__')
-                  Padding(
-                    padding: const EdgeInsets.only(top:8.0),
-                    child: Column(
+                  : Column(
                       children: [
                         TextFormField(
                           controller: _supplierFreeController,
-                          decoration: const InputDecoration(labelText: 'Nama Supplier (bebas)', border: OutlineInputBorder()),
+                          decoration: InputDecoration(
+                            prefixIcon: Icon(Icons.business, color: Colors.blue[700]),
+                            suffixIcon: IconButton(icon: const Icon(Icons.arrow_drop_down), onPressed: () => _showSupplierPicker(context)),
+                            hintText: 'Pilih atau ketik supplier',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          onChanged: (v) {
+                            setState(() {
+                              _selectedSupplierId = '__other__';
+                              _supplierSaved = false;
+                            });
+                          },
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  await _saveSupplier();
-                                },
-                                child: const Text('Simpan Supplier'),
-                              ),
+                        if (_selectedSupplierId == '__other__')
+                          Padding(
+                            padding: const EdgeInsets.only(top:8.0),
+                            child: Column(
+                              children: [
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: () async {
+                                          await _saveSupplier();
+                                        },
+                                        child: const Text('Simpan Supplier'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
                       ],
                     ),
-                  ),
               ],
             ),
           ),
@@ -1105,22 +1140,22 @@ class _AddProductPageState extends State<AddProductPage> {
     });
 
     try {
-      final api = DataService();
       final owner = widget.ownerId ?? '';
       final newSupId = 'SUP${DateTime.now().millisecondsSinceEpoch}';
+      final firestore = FirebaseFirestore.instance;
       final payload = {
-        '_id': newSupId,
         'ownerid': owner,
         'supplier_id': newSupId,
         'nama_perusahaan': supplierName,
         'nama_agen': '',
         'no_telepon_agen': '',
         'alamat_perusahaan': '',
+        'createdAt': FieldValue.serverTimestamp(),
       };
-      await api.insertOne(token, project, 'suppliers', appid, payload);
+      await firestore.collection('suppliers').doc(newSupId).set(payload);
 
       setState(() {
-        _suppliers.insert(0, {'id': newSupId, 'company': supplierName, '_raw': payload});
+        _suppliers.insert(0, {'id': newSupId, 'company': supplierName, '_raw': {...payload, '_docId': newSupId}});
         _selectedSupplierId = newSupId;
         _supplierSaved = true;
       });
