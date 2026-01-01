@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/auth_provider.dart';
 import '../pages/barcode_scanner_page.dart';
 import '../pages/tambah_product_page.dart';
@@ -161,15 +162,24 @@ class DashboardStaffScreen {
         }
       }
 
-      // Fetch suppliers (filter by owner if possible)
-      dynamic supRes;
-      if (ownerId.isNotEmpty) {
-        supRes = await _api.selectWhere(token, project, 'suppliers', appid, 'ownerid', ownerId);
-      } else {
-        supRes = await _api.selectAll(token, project, 'suppliers', appid);
+      // Fetch suppliers count from Firestore when possible (preferred)
+      try {
+        final firestore = FirebaseFirestore.instance;
+        Query q = firestore.collection('suppliers');
+        if (ownerId.isNotEmpty) q = q.where('ownerid', isEqualTo: ownerId);
+        final snap = await q.get();
+        supplierCount = snap.size;
+      } catch (_) {
+        // fallback to existing REST logic
+        dynamic supRes;
+        if (ownerId.isNotEmpty) {
+          supRes = await _api.selectWhere(token, project, 'suppliers', appid, 'ownerid', ownerId);
+        } else {
+          supRes = await _api.selectAll(token, project, 'suppliers', appid);
+        }
+        final List<dynamic> sups = _parseSelectResponse(supRes);
+        supplierCount = sups.length;
       }
-      final List<dynamic> sups = _parseSelectResponse(supRes);
-      supplierCount = sups.length;
 
       // Fetch best sellers (produk dengan penjualan terbanyak)
       final oiRes = (ownerId.isNotEmpty)
