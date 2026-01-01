@@ -1,6 +1,9 @@
 // lib/pages/add_product_page.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../screens/tambah_product_screen.dart';
+import '../services/restapi.dart';
+import '../services/config.dart';
 
 class AddProductPage extends StatefulWidget {
   final String userRole;
@@ -28,11 +31,14 @@ class _AddProductPageState extends State<AddProductPage> {
   final TextEditingController _codeController = TextEditingController();
   final TextEditingController _merekController = TextEditingController();
   final TextEditingController _hargaController = TextEditingController();
-  final TextEditingController _jumlahController = TextEditingController(text: '1');
   final TextEditingController _tanggalExpiredController = TextEditingController();
+  List<Map<String, dynamic>> _suppliers = [];
+  bool _loadingSuppliers = true;
+  String? _selectedSupplierId;
+  final TextEditingController _supplierFreeController = TextEditingController();
+  bool _supplierSaved = false;
   
   bool _isLoading = false;
-  bool _jumlahFromScan = false;
   Map<String, int>? _scannedCountsMap;
   final List<String> _barcodeList = [];
   String _selectedCategory = 'Makanan';
@@ -48,21 +54,27 @@ class _AddProductPageState extends State<AddProductPage> {
       codeCtrl: _codeController,
       merekCtrl: _merekController,
       hargaCtrl: _hargaController,
-      jumlahCtrl: _jumlahController,
       tanggalExpiredCtrl: _tanggalExpiredController,
     );
     
     _selectedCategory = _controller.selectedCategory;
+    _selectedSupplierId = null;
+    _loadSuppliers();
     // Ensure code field shows initial generated code
     _codeController.text = _controller.productCode;
     // If initial barcode provided, add to barcode list (avoid duplicates)
     if (widget.barcode != null && widget.barcode!.isNotEmpty) {
-      if (!_barcodeList.contains(widget.barcode!)) {
-        _barcodeList.add(widget.barcode!);
+      // support comma-separated barcode string (from multi-scan result)
+      final incoming = widget.barcode!.trim();
+      final parts = incoming.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      if (parts.isEmpty) {
+        if (!_barcodeList.contains(incoming)) _barcodeList.add(incoming);
+      } else {
+        for (final p in parts) {
+          if (!_barcodeList.contains(p)) _barcodeList.add(p);
+        }
       }
       _codeController.text = _barcodeList.join(',');
-      _jumlahController.text = _barcodeList.length.toString();
-      _jumlahFromScan = _barcodeList.isNotEmpty;
       // rebuild scanned counts map from barcode list
       _scannedCountsMap = {};
       for (final b in _barcodeList) {
@@ -71,9 +83,54 @@ class _AddProductPageState extends State<AddProductPage> {
     }
   }
 
+  Future<void> _loadSuppliers() async {
+    setState(() => _loadingSuppliers = true);
+    try {
+      final api = DataService();
+      // try to get ownerId from controller if available
+      final owner = _controller.ownerId ?? '';
+      dynamic res;
+      if (owner.isNotEmpty) {
+        res = await api.selectWhere(token, project, 'suppliers', appid, 'ownerid', owner);
+      } else {
+        res = await api.selectAll(token, project, 'suppliers', appid);
+      }
+      final decoded = res is String ? (res.trim().isEmpty ? [] : json.decode(res)) : res;
+      final rawList = (decoded is Map) ? (decoded['data'] ?? []) : (decoded is List ? decoded : []);
+      final items = List<Map<String, dynamic>>.from(rawList);
+      final mapped = items.map((item) {
+        // extract id
+        String id = '';
+        try {
+          final rawId = item['_id'] ?? item['id'] ?? '';
+          if (rawId is Map) {
+            if (rawId.containsKey('\$oid')) id = rawId['\$oid'].toString();
+            else if (rawId.containsKey('\$oid')) id = rawId['\$oid'].toString();
+            else id = rawId.toString();
+          } else {
+            id = rawId?.toString() ?? '';
+          }
+        } catch (_) {}
+        return {
+          'id': id,
+          'company': item['nama_perusahaan'] ?? item['company'] ?? '',
+          '_raw': item,
+        };
+      }).toList();
+      setState(() {
+        _suppliers = mapped;
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal memuat supplier: $e')));
+    } finally {
+      setState(() => _loadingSuppliers = false);
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
+    _supplierFreeController.dispose();
     super.dispose();
   }
 
@@ -202,9 +259,13 @@ class _AddProductPageState extends State<AddProductPage> {
                   const SizedBox(height: 16),
                   
                   _buildCategoryField(),
-                  
+
                   const SizedBox(height: 16),
-                  
+
+                  _buildSupplierField(),
+
+                  const SizedBox(height: 16),
+
                   _buildTextField(
                     label: 'Merek Produk',
                     hint: 'Contoh: Indofood',
@@ -237,10 +298,6 @@ class _AddProductPageState extends State<AddProductPage> {
                       return null;
                     },
                   ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  _buildJumlahField(),
                   
                   const SizedBox(height: 16),
                   
@@ -473,85 +530,71 @@ class _AddProductPageState extends State<AddProductPage> {
     );
   }
 
-  Widget _buildJumlahField() {
+  Widget _buildSupplierField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              'Jumlah Stok',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (_jumlahFromScan)
-              Tooltip(
-                message: 'Jumlah berasal dari hasil scan (otomatis)',
-                child: Icon(Icons.info_outline, color: Colors.blue[700], size: 18),
-              ),
-          ],
-        ),
+        Text('Supplier', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700])),
         const SizedBox(height: 8),
         Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: TextFormField(
-            controller: _jumlahController,
-            readOnly: _jumlahFromScan,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              hintText: '1',
-              prefixIcon: Icon(Icons.inventory_rounded, color: Colors.blue[700]),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey[200]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red, width: 2),
-              ),
-              filled: true,
-              fillColor: Colors.white,
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0,2)),
+          ]),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Column(
+              children: [
+                _loadingSuppliers
+                  ? const Padding(padding: EdgeInsets.symmetric(vertical:12), child: Center(child: CircularProgressIndicator()))
+                  : DropdownButtonFormField<String>(
+                      value: _selectedSupplierId,
+                      decoration: InputDecoration(prefixIcon: Icon(Icons.business, color: Colors.blue[700]), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), filled: true, fillColor: Colors.white),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('Pilih supplier (opsional)')),
+                        ..._suppliers.map((s) => DropdownMenuItem(value: s['id'] ?? '', child: Text(s['company'] ?? ''))),
+                        const DropdownMenuItem(value: '__other__', child: Text('Lainnya / Masukkan manual')),
+                      ],
+                      onChanged: (v) {
+                        setState(() {
+                          _selectedSupplierId = v;
+                          _supplierSaved = (v != '__other__' && v != null);
+                        });
+                      },
+                    ),
+                if (_selectedSupplierId == '__other__')
+                  Padding(
+                    padding: const EdgeInsets.only(top:8.0),
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _supplierFreeController,
+                          decoration: const InputDecoration(labelText: 'Nama Supplier (bebas)', border: OutlineInputBorder()),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  await _saveSupplier();
+                                },
+                                child: const Text('Simpan Supplier'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Jumlah stok wajib diisi';
-              }
-              if (int.tryParse(value) == null) {
-                return 'Jumlah harus berupa angka';
-              }
-              return null;
-            },
           ),
         ),
       ],
     );
   }
+
+  
 
   Widget _buildDateField() {
     return Column(
@@ -640,8 +683,6 @@ class _AddProductPageState extends State<AddProductPage> {
             // update controllers and maps in parent state
             setState(() {
               _codeController.text = _barcodeList.join(',');
-              _jumlahController.text = _barcodeList.length.toString();
-              _jumlahFromScan = _barcodeList.isNotEmpty;
               // rebuild scannedCountsMap
               _scannedCountsMap = {};
               for (final b in _barcodeList) {
@@ -888,7 +929,7 @@ class _AddProductPageState extends State<AddProductPage> {
           return;
         }
         
-        setState(() {
+          setState(() {
           _barcodeList.add(scannedCode);
           _codeController.text = _barcodeList.join(',');
           _controller.productId = _barcodeList.first;
@@ -896,10 +937,7 @@ class _AddProductPageState extends State<AddProductPage> {
           if (_controller.codeController != null) {
             _controller.codeController!.text = _barcodeList.first;
           }
-          _jumlahController.text = _barcodeList.length.toString();
-          _jumlahFromScan = true;
-
-          // update scanned counts map
+            // update scanned counts map
           _scannedCountsMap = {};
           for (final b in _barcodeList) {
             _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
@@ -954,9 +992,6 @@ class _AddProductPageState extends State<AddProductPage> {
             if (_controller.codeController != null) {
               _controller.codeController!.text = _barcodeList.first;
             }
-            _jumlahController.text = _barcodeList.length.toString();
-            _jumlahFromScan = true;
-
             // store full map for later batch insert (aggregate from barcodeList)
             _scannedCountsMap = {};
             for (final b in _barcodeList) {
@@ -965,6 +1000,56 @@ class _AddProductPageState extends State<AddProductPage> {
           });
         }
       }
+    }
+  }
+
+  Future<void> _saveSupplier() async {
+    final supplierName = _supplierFreeController.text.trim();
+    if (supplierName.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Masukkan nama supplier terlebih dahulu')));
+      return;
+    }
+
+    // If user selected manual supplier, ensure they've saved it separately
+    if (_selectedSupplierId == '__other__' && !_supplierSaved) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Simpan supplier terlebih dahulu menggunakan tombol "Simpan Supplier"')));
+      }
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final api = DataService();
+      final owner = widget.ownerId ?? '';
+      final newSupId = 'SUP${DateTime.now().millisecondsSinceEpoch}';
+      final payload = {
+        '_id': newSupId,
+        'ownerid': owner,
+        'supplier_id': newSupId,
+        'nama_perusahaan': supplierName,
+        'nama_agen': '',
+        'no_telepon_agen': '',
+        'alamat_perusahaan': '',
+      };
+      await api.insertOne(token, project, 'suppliers', appid, payload);
+
+      setState(() {
+        _suppliers.insert(0, {'id': newSupId, 'company': supplierName, '_raw': payload});
+        _selectedSupplierId = newSupId;
+        _supplierSaved = true;
+      });
+
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Supplier berhasil disimpan')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menyimpan supplier: $e')));
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -1008,10 +1093,24 @@ class _AddProductPageState extends State<AddProductPage> {
     });
 
     Map<String, dynamic> result;
+    String? supplierId;
+    String? supplierName;
+    if (_selectedSupplierId != null) {
+      if (_selectedSupplierId == '__other__') {
+        supplierName = _supplierFreeController.text.trim();
+      } else {
+        supplierId = _selectedSupplierId;
+        final found = _suppliers.firstWhere((s) => (s['id'] ?? '') == supplierId, orElse: () => {});
+        supplierName = found.isNotEmpty ? (found['company'] ?? '') : null;
+      }
+    }
+
+    
+
     if (_barcodeList.isNotEmpty) {
-      result = await _controller.addProductsFromScans(_barcodeList);
+      result = await _controller.addProductsFromScans(_barcodeList, supplierId: supplierId, supplierName: supplierName);
     } else {
-      result = await _controller.addProduct();
+      result = await _controller.addProduct(supplierId: supplierId, supplierName: supplierName);
     }
 
     setState(() {

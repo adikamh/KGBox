@@ -653,7 +653,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
               borderRadius: BorderRadius.circular(30),
             ),
             child: const Icon(
-              Icons.qr_code_scanner,
+              Icons.barcode_reader,
               color: Colors.white,
               size: 30,
             ),
