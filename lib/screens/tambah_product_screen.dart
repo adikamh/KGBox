@@ -21,6 +21,7 @@ class AddProductScreen {
   TextEditingController? merekController;
   TextEditingController? hargaController;
   TextEditingController? tanggalExpiredController;
+  TextEditingController? productionDateController;
   
   // Initialize
   void initialize({
@@ -31,12 +32,14 @@ class AddProductScreen {
     TextEditingController? merekCtrl,
     TextEditingController? hargaCtrl,
     TextEditingController? tanggalExpiredCtrl,
+    TextEditingController? productionDateCtrl,
   }) {
     nameController = nameCtrl ?? TextEditingController();
     codeController = codeCtrl ?? TextEditingController();
     merekController = merekCtrl ?? TextEditingController();
     hargaController = hargaCtrl ?? TextEditingController();
     tanggalExpiredController = tanggalExpiredCtrl ?? TextEditingController();
+    productionDateController = productionDateCtrl ?? TextEditingController();
     this.ownerId = ownerId;
     
     productId = barcode ?? _generateProductId();
@@ -46,6 +49,30 @@ class AddProductScreen {
       codeController!.text = barcode;
     } else {
       codeController!.text = productCode;
+    }
+  }
+
+  // Save scanned barcodes into temporary collection
+  Future<void> saveScansToTemp(List<String> barcodes) async {
+    if (barcodes.isEmpty) return;
+    try {
+      for (final barcode in barcodes) {
+        final id = barcode.trim();
+        if (id.isEmpty) continue;
+        final docRef = _firestore.collection('temp_barcodes').doc(id);
+        final doc = await docRef.get();
+        if (!doc.exists) {
+          await docRef.set({
+            'barcode': id,
+            'scannedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          // optionally update scannedAt
+          try { await docRef.update({'scannedAt': FieldValue.serverTimestamp()}); } catch (_) {}
+        }
+      }
+    } catch (e) {
+      // ignore errors - temp storage best-effort
     }
   }
   
@@ -116,6 +143,9 @@ class AddProductScreen {
 
     // Create master product document in 'products' collection
     final String masterId = (productId.isNotEmpty && productId != codeController?.text) ? productId : _generateProductId();
+    final String productionDate = productionDateController?.text.trim().isNotEmpty == true
+        ? productionDateController!.text.trim()
+        : _formatCurrentDateTime();
     final Map<String, dynamic> productDoc = {
       'productId': masterId,
       'nama': nameController!.text.trim(),
@@ -123,12 +153,14 @@ class AddProductScreen {
       'category': selectedCategory,
       'price': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
       'sellingPrice': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
-      'productionDate': _formatCurrentDateTime(),
+      'productionDate': productionDate,
       'expiredDate': tanggalExpiredController!.text.trim(),
       'supplierId': supplierId ?? '',
       'supplierName': supplierName ?? '',
       'createdAt': FieldValue.serverTimestamp(),
       'ownerId': ownerId ?? '',
+      // productKey groups by name, brand, category and productionDate — different production dates create new master
+      'productKey': '${nameController!.text.trim().toLowerCase()}_${merekController!.text.trim().toLowerCase()}_${selectedCategory.toLowerCase()}_${productionDate}',
     };
 
     try {
@@ -163,35 +195,68 @@ class AddProductScreen {
       };
     }
 
-    // Create one master product and then add all scanned barcodes to product_barcode
-    final String masterId = _generateProductId();
-    final Map<String, dynamic> productDoc = {
-      'productId': masterId,
-      'nama': nameController!.text.trim(),
-      'brand': merekController!.text.trim(),
-      'category': selectedCategory,
-      'price': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
-      'sellingPrice': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
-      'productionDate': _formatCurrentDateTime(),
-      'expiredDate': tanggalExpiredController!.text.trim(),
-      'supplierId': supplierId ?? '',
-      'supplierName': supplierName ?? '',
-      'createdAt': FieldValue.serverTimestamp(),
-      'ownerId': ownerId ?? '',
-    };
-
-    final List<Map<String, dynamic>> results = [];
+    // Compute productKey and check for existing master to avoid duplicates
+    final String productionDate = productionDateController?.text.trim().isNotEmpty == true
+        ? productionDateController!.text.trim()
+        : _formatCurrentDateTime();
+    // productKey groups by name, brand, category and productionDate
+    final String productKey = '${nameController!.text.trim().toLowerCase()}_${merekController!.text.trim().toLowerCase()}_${selectedCategory.toLowerCase()}_${productionDate}';
 
     try {
-      await _firestore.collection('products').doc(masterId).set(productDoc);
+      // look up existing master by productKey
+      final query = await _firestore.collection('products').where('productKey', isEqualTo: productKey).limit(1).get();
+      String masterId;
+      Map<String, dynamic>? productDoc;
 
-      for (final barcode in barcodes) {
+      if (query.docs.isNotEmpty) {
+        final doc = query.docs.first;
+        masterId = doc.id;
+        productDoc = doc.data();
+      } else {
+        // create new master
+        masterId = _generateProductId();
+        productDoc = {
+          'productId': masterId,
+          'nama': nameController!.text.trim(),
+          'brand': merekController!.text.trim(),
+          'category': selectedCategory,
+          'price': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
+          'sellingPrice': int.tryParse(hargaController?.text.trim() ?? '0') ?? 0,
+          'productionDate': productionDate,
+          'expiredDate': tanggalExpiredController!.text.trim(),
+          'supplierId': supplierId ?? '',
+          'supplierName': supplierName ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+          'ownerId': ownerId ?? '',
+          'productKey': productKey,
+        };
+        await _firestore.collection('products').doc(masterId).set(productDoc);
+      }
+
+      // Move all temp_barcodes into product_barcodes (attach to masterId)
+      final tempSnap = await _firestore.collection('temp_barcodes').get();
+      final List<Map<String, dynamic>> results = [];
+
+      for (final tdoc in tempSnap.docs) {
+        final b = tdoc.id;
         try {
-          if (barcode.trim().isEmpty) {
-            results.add({'barcode': barcode, 'success': false, 'error': 'Empty barcode'});
-            continue;
-          }
-          // store barcode as document ID under 'product_barcodes' for easy querying
+          final scannedAt = (tdoc.data()['scannedAt'] is Timestamp) ? tdoc.data()['scannedAt'] : FieldValue.serverTimestamp();
+          await _firestore.collection('product_barcodes').doc(b).set({
+            'productId': masterId,
+            'scannedAt': scannedAt,
+          });
+          // delete from temp
+          try { await tdoc.reference.delete(); } catch (_) {}
+          results.add({'barcode': b, 'success': true});
+        } catch (e) {
+          results.add({'barcode': b, 'success': false, 'error': e.toString()});
+        }
+      }
+
+      // Also ensure any barcodes passed in are present (in case not saved to temp)
+      for (final barcode in barcodes) {
+        if (barcode.trim().isEmpty) continue;
+        try {
           await _firestore.collection('product_barcodes').doc(barcode.trim()).set({
             'productId': masterId,
             'scannedAt': FieldValue.serverTimestamp(),
@@ -263,5 +328,6 @@ class AddProductScreen {
     merekController?.dispose();
     hargaController?.dispose();
     tanggalExpiredController?.dispose();
+    productionDateController?.dispose();
   }
 }

@@ -29,6 +29,8 @@ class DetailProductScreen {
     // purchase/created date
     final dynamic rawPurchase = product['createdAt'] ?? product['productionDate'] ?? product['tanggal_beli'] ?? product['purchaseDate'];
 
+    final dynamic rawProductDate = product['productionDate'] ?? product['tanggal_beli'] ?? product['createdAt'] ?? product['productionDate'];
+
     // expired date
     final dynamic rawExpired = product['expiredDate'] ?? product['tanggal_expired'] ?? product['expired'];
 
@@ -45,6 +47,9 @@ class DetailProductScreen {
       'stock': stockVal?.toString() ?? '0',
       'purchaseRaw': rawPurchase,
       'purchaseDate': _formatDate(rawPurchase),
+      'productDate': _formatDate(rawProductDate),
+      // alias used by UI
+      'productionDate': _formatDate(rawProductDate),
       'expiredRaw': rawExpired,
       'expiredText': _computeExpiredText(rawExpired),
     };
@@ -277,7 +282,57 @@ class DetailProductScreen {
   
   // Create ProductModel from product data
   ProductModel createProductModel() {
-    // ignore: unnecessary_cast
-    return ProductModel.fromJson(product as Map<String, dynamic>);
+    // Build a normalized map from available product fields so ProductModel is fully populated
+    final Map<String, dynamic> src = Map<String, dynamic>.from(product);
+
+    final String docId = (src['id'] ?? src['productId'] ?? src['id_product'] ?? '').toString();
+    final String idProduct = src['productId']?.toString() ?? src['id_product']?.toString() ?? docId;
+    final String nama = (src['name'] ?? src['nama'] ?? src['nama_product'] ?? '').toString();
+    final String kategori = (src['category'] ?? src['kategori'] ?? src['kategori_product'] ?? '').toString();
+    final String merek = (src['brand'] ?? src['merek'] ?? src['merek_product'] ?? '').toString();
+
+    // production/purchase/expired fields may be in different keys
+    final dynamic rawPurchase = src['createdAt'] ?? src['purchaseDate'] ?? src['tanggal_beli'] ?? src['tanggal_beli_raw'];
+    final dynamic rawProduction = src['productionDate'] ?? src['production_date'] ?? src['tanggal_produksi'] ?? rawPurchase;
+    final dynamic rawExpired = src['expiredDate'] ?? src['expired'] ?? src['tanggal_expired'] ?? src['expiredRaw'];
+
+    String tanggalBeli = '';
+    try {
+      if (rawPurchase is String) tanggalBeli = rawPurchase;
+      else if (rawPurchase is Timestamp) tanggalBeli = rawPurchase.toDate().toIso8601String().split('T').first;
+    } catch (_) {}
+
+    String productionDate = '';
+    try {
+      if (rawProduction is String) productionDate = rawProduction;
+      else if (rawProduction is Timestamp) productionDate = rawProduction.toDate().toIso8601String().split('T').first;
+    } catch (_) {}
+
+    String expired = '';
+    try {
+      if (rawExpired is String) expired = rawExpired;
+      else if (rawExpired is Timestamp) expired = rawExpired.toDate().toIso8601String().split('T').first;
+    } catch (_) {}
+
+    final String price = (src['sellingPrice'] ?? src['price'] ?? src['priceRaw'] ?? '').toString();
+    final String jumlah = (src['stock'] ?? src['jumlah_produk'] ?? 0).toString();
+    final List<String> barcodes = (src['barcode_list'] is List) ? List<String>.from(src['barcode_list']) : (src['barcode_list']?.toString().split(',')?.map((s) => s.trim())?.where((s) => s.isNotEmpty)?.toList() ?? <String>[]);
+    final String supplier = (src['supplierName'] ?? src['supplier_name'] ?? src['supplier'] ?? '').toString();
+
+    return ProductModel(
+      id: docId,
+      id_product: idProduct,
+      nama_product: nama,
+      kategori_product: kategori,
+      merek_product: merek,
+      tanggal_beli: tanggalBeli,
+      production_date: productionDate,
+      harga_product: price,
+      jumlah_produk: jumlah,
+      barcode_list: barcodes,
+      tanggal_expired: expired,
+      supplier_name: supplier,
+      ownerid: src['ownerId']?.toString() ?? src['ownerid']?.toString() ?? '',
+    );
   }
 }

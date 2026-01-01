@@ -31,6 +31,7 @@ class _AddProductPageState extends State<AddProductPage> {
   final TextEditingController _codeController = TextEditingController();
   final TextEditingController _merekController = TextEditingController();
   final TextEditingController _hargaController = TextEditingController();
+  final TextEditingController _productionDateController = TextEditingController();
   final TextEditingController _tanggalExpiredController = TextEditingController();
   List<Map<String, dynamic>> _suppliers = [];
   bool _loadingSuppliers = true;
@@ -55,6 +56,7 @@ class _AddProductPageState extends State<AddProductPage> {
       merekCtrl: _merekController,
       hargaCtrl: _hargaController,
       tanggalExpiredCtrl: _tanggalExpiredController,
+      productionDateCtrl: _productionDateController,
     );
     
     _selectedCategory = _controller.selectedCategory;
@@ -81,6 +83,84 @@ class _AddProductPageState extends State<AddProductPage> {
         _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
       }
     }
+    // persist any already-scanned barcodes into temp_barcodes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _controller.saveScansToTemp(_barcodeList);
+    });
+  }
+
+  Widget _buildProductionDateField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tanggal Produksi',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: TextFormField(
+            controller: _productionDateController,
+            readOnly: true,
+            decoration: InputDecoration(
+              hintText: 'YYYY-MM-DD',
+              prefixIcon: IconButton(
+                icon: Icon(Icons.calendar_today_rounded, color: Colors.blue[700]),
+                onPressed: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    _productionDateController.text = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                  }
+                },
+                tooltip: 'Pilih Tanggal',
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[200]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _productionDateController.dispose();
+    _supplierFreeController.dispose();
+    _controller.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSuppliers() async {
@@ -127,12 +207,7 @@ class _AddProductPageState extends State<AddProductPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    _supplierFreeController.dispose();
-    super.dispose();
-  }
+  
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +328,10 @@ class _AddProductPageState extends State<AddProductPage> {
                   ),
                   
                   const SizedBox(height: 16),
-                  
+
+                  _buildProductionDateField(),
+                  const SizedBox(height: 16),
+
                   _buildCodeField(),
                   
                   const SizedBox(height: 16),
@@ -943,6 +1021,8 @@ class _AddProductPageState extends State<AddProductPage> {
             _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
           }
         });
+          // persist this scan to temp_barcodes
+          try { await _controller.saveScansToTemp([scannedCode]); } catch (_) {}
       }
       // If scanner returned multiple scanned counts -> expand and append (skip duplicates)
       else if (scanResult is Map) {
@@ -998,6 +1078,8 @@ class _AddProductPageState extends State<AddProductPage> {
               _scannedCountsMap![b] = (_scannedCountsMap![b] ?? 0) + 1;
             }
           });
+          // persist new scans to temp
+          try { await _controller.saveScansToTemp(newBarcodes); } catch (_) {}
         }
       }
     }
