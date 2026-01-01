@@ -453,6 +453,14 @@ class _DetailProductPageState extends State<DetailProductPage> {
             
             _buildDetailRow(
               icon: Icons.calendar_today_rounded,
+              label: 'Tanggal produksi',
+              value: product['productionDate']?.toString() ?? '-',
+            ),
+            
+            const Divider(height: 32),
+
+            _buildDetailRow(
+              icon: Icons.calendar_today_rounded,
               label: 'Tanggal Expired',
               value: product['expiredText']?.toString() ?? '-',
               valueColor: controller.getExpiredStatusColor(),

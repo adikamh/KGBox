@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/product_model.dart';
-import '../services/restapi.dart';
 import '../services/config.dart';
 
 /// A lightweight controller/helper for the Edit Product page.
@@ -23,12 +23,17 @@ class EditProductScreen {
     if (_controllers.isNotEmpty) return _controllers;
 
     String tanggalBeliText = product.tanggal_beli;
-    // try to convert yyyy-MM-dd -> dd/MM/yyyy for display
+    // try to convert yyyy-MM-dd -> 'MMMM d, yyyy' for display (e.g., January 1, 2026)
     if (tanggalBeliText.isNotEmpty) {
       try {
         final parsed = DateFormat('yyyy-MM-dd').parse(tanggalBeliText);
-        tanggalBeliText = DateFormat('dd/MM/yyyy').format(parsed);
-      } catch (_) {}
+        tanggalBeliText = DateFormat('MMMM d, yyyy').format(parsed);
+      } catch (_) {
+        try {
+          final parsed2 = DateFormat('dd/MM/yyyy').parse(tanggalBeliText);
+          tanggalBeliText = DateFormat('MMMM d, yyyy').format(parsed2);
+        } catch (_) {}
+      }
     }
 
     _controllers['id_product'] = TextEditingController(text: product.id_product);
@@ -37,8 +42,28 @@ class EditProductScreen {
     _controllers['merek_product'] = TextEditingController(text: product.merek_product);
     _controllers['tanggal_beli'] = TextEditingController(text: tanggalBeliText);
     _controllers['harga_product'] = TextEditingController(text: _formatPriceDisplay(product.harga_product));
-    _controllers['jumlah_produk'] = TextEditingController(text: product.jumlah_produk);
+    // production date (if present in model) - format for display
+    String prodText = product.production_date ?? '';
+    if (prodText.isNotEmpty) {
+      try {
+        final parsed = DateFormat('yyyy-MM-dd').parse(prodText);
+        prodText = DateFormat('dd/MM/yyyy').format(parsed);
+      } catch (_) {
+        try {
+          final parsed2 = DateFormat('dd/MM/yyyy').parse(prodText);
+          prodText = DateFormat('dd/MM/yyyy').format(parsed2);
+        } catch (_) {
+          // leave as-is
+        }
+      }
+    }
+    _controllers['tanggal_produksi'] = TextEditingController(text: prodText);
+    // stock is not editable in master form
+    // expired will be computed from created date delta; include controller for display if needed
     _controllers['tanggal_expired'] = TextEditingController(text: product.tanggal_expired);
+
+    // supplier name editable
+    _controllers['supplier_name'] = TextEditingController(text: product.supplier_name ?? '');
 
     return _controllers;
   }
@@ -128,16 +153,8 @@ class EditProductScreen {
       final harga = int.tryParse(clean);
       if (harga == null || harga <= 0) errors['harga_product'] = 'Harga harus berupa angka positif';
     }
-
-    final jumlahText = controllers['jumlah_produk']?.text.trim() ?? '';
-    if (jumlahText.isEmpty) errors['jumlah_produk'] = 'Jumlah stok harus diisi';
-    else {
-      final jumlah = int.tryParse(jumlahText);
-      if (jumlah == null || jumlah < 0) errors['jumlah_produk'] = 'Jumlah stok harus berupa angka';
-    }
-
-    final tanggalExpired = controllers['tanggal_expired']?.text.trim() ?? '';
-    if (tanggalExpired.isEmpty) errors['tanggal_expired'] = 'Tanggal expired harus diisi';
+    // stock is not editable in master form; do not validate jumlah_produk
+    // expiredDate will be derived from createdAt; no validation here
 
     return errors;
   }
@@ -155,11 +172,41 @@ class EditProductScreen {
     final tanggalBeliText = controllers['tanggal_beli']?.text.trim() ?? '';
     if (tanggalBeliText.isNotEmpty) {
       try {
-        final parsed = DateFormat('dd/MM/yyyy').parse(tanggalBeliText);
+        // try 'MMMM d, yyyy' e.g., January 1, 2026
+        final parsed = DateFormat('MMMM d, yyyy').parse(tanggalBeliText);
         tanggalBeliFormatted = DateFormat('yyyy-MM-dd').format(parsed);
       } catch (_) {
-        tanggalBeliFormatted = tanggalBeliText;
+        try {
+          final parsed2 = DateFormat('dd/MM/yyyy').parse(tanggalBeliText);
+          tanggalBeliFormatted = DateFormat('yyyy-MM-dd').format(parsed2);
+        } catch (_) {
+          tanggalBeliFormatted = tanggalBeliText;
+        }
       }
+    }
+
+    // production date formatting for storage
+    String productionFormatted = '';
+    final prodText = controllers['tanggal_produksi']?.text.trim() ?? '';
+    if (prodText.isNotEmpty) {
+      try {
+        final p = DateTime.parse(prodText);
+        productionFormatted = '${p.year}-${p.month.toString().padLeft(2,'0')}-${p.day.toString().padLeft(2,'0')}';
+      } catch (_) {
+        try {
+          final p2 = DateFormat('dd/MM/yyyy').parse(prodText);
+          productionFormatted = '${p2.year}-${p2.month.toString().padLeft(2,'0')}-${p2.day.toString().padLeft(2,'0')}';
+        } catch (_) {
+          try {
+            final p3 = DateFormat('MMMM d, yyyy').parse(prodText);
+            productionFormatted = '${p3.year}-${p3.month.toString().padLeft(2,'0')}-${p3.day.toString().padLeft(2,'0')}';
+          } catch (_) {
+            productionFormatted = prodText;
+          }
+        }
+      }
+    } else {
+      productionFormatted = product.production_date ?? '';
     }
 
     final updated = ProductModel(
@@ -169,234 +216,113 @@ class EditProductScreen {
       kategori_product: controllers['kategori_product']!.text.trim(),
       merek_product: controllers['merek_product']!.text.trim(),
       tanggal_beli: tanggalBeliFormatted,
+      production_date: productionFormatted,
+      supplier_name: controllers['supplier_name']?.text.trim() ?? product.supplier_name ?? '',
       harga_product: formatPriceForStorage(controllers['harga_product']!.text),
-      jumlah_produk: controllers['jumlah_produk']!.text.trim(),
+      // keep existing jumlah_produk (not editable here)
+      jumlah_produk: product.jumlah_produk,
       barcode_list: product.barcode_list,
       tanggal_expired: controllers['tanggal_expired']!.text.trim(),
     );
-    // Attempt to update on server via DataService
-    final api = DataService();
+    // Prepare Firestore update payload for master product doc
+    try {
+      final firestore = FirebaseFirestore.instance;
 
-    // Prepare fields map for key->value update (preferred)
-    final fields = <String, String>{
-      'nama_product': updated.nama_product,
-      'kategori_product': updated.kategori_product,
-      'merek_product': updated.merek_product,
-      'tanggal_beli': updated.tanggal_beli,
-      'harga_product': updated.harga_product,
-      'jumlah_produk': updated.jumlah_produk,
-      'tanggal_expired': updated.tanggal_expired,
-    };
-
-    // First try updateOne (map-based) which is more robust than comma-separated updateId
-    debugPrint('Attempting updateOne with _id=${product.id}');
-    bool ok = await api.updateOne(token, project, collection, appid, product.id, Map<String, dynamic>.from(fields));
-
-    if (ok != true && product.id_product.isNotEmpty) {
-      debugPrint('updateOne by _id failed; trying with id_product=${product.id_product}');
-      ok = await api.updateOne(token, project, collection, appid, product.id_product, Map<String, dynamic>.from(fields));
-    }
-
-    // If updateOne failed, fallback to existing bulk `updateId` strategy then per-field `updateWhere`
-    if (ok != true) {
-      final fieldList = fields.keys.join(',');
-      final valueList = fields.values.map((v) => v.replaceAll(',', '\\,')).join(',');
-
-      // Try primary update by internal id using legacy endpoint
-      debugPrint('updateOne failed; attempting legacy updateId with _id=${product.id}');
-      ok = await api.updateId(fieldList, valueList, token, project, collection, appid, product.id);
-
-      if (ok != true && product.id_product.isNotEmpty) {
-        debugPrint('updateId by _id failed; trying with id_product=${product.id_product}');
-        ok = await api.updateId(fieldList, valueList, token, project, collection, appid, product.id_product);
+      // Determine document id to update: prefer internal _id, then id_product
+      String docId = product.id.isNotEmpty ? product.id : (product.id_product.isNotEmpty ? product.id_product : updated.id_product);
+      if (docId.isEmpty) {
+        return {'success': false, 'message': 'Tidak dapat menentukan docId untuk produk'};
       }
 
-      if (ok != true) {
-        debugPrint('Bulk update failed; attempting per-field updateWhere fallback');
-        bool allFieldOk = true;
-        for (final entry in fields.entries) {
-          try {
-            // try by _id first
-            bool fieldOk = await api.updateWhere('_id', product.id, entry.key, entry.value, token, project, collection, appid);
-            if (fieldOk != true && product.id.isNotEmpty) {
-              // try by id (server may use 'id' field)
-              fieldOk = await api.updateWhere('id', product.id, entry.key, entry.value, token, project, collection, appid);
-            }
-            if (fieldOk != true && product.id_product.isNotEmpty) {
-              // try by id_product
-              fieldOk = await api.updateWhere('id_product', product.id_product, entry.key, entry.value, token, project, collection, appid);
-            }
-            debugPrint('field ${entry.key} updateWhere result: $fieldOk');
-            if (!fieldOk) allFieldOk = false;
-          } catch (e) {
-            debugPrint('Exception updating field ${entry.key}: $e');
-            allFieldOk = false;
-          }
-          await Future.delayed(const Duration(milliseconds: 120));
+      // Parse original created & expired dates to compute delta
+      DateTime? originalCreated;
+      DateTime? originalExpired;
+      try {
+        if (product.tanggal_beli.isNotEmpty) {
+          originalCreated = DateTime.tryParse(product.tanggal_beli) ?? DateFormat('dd/MM/yyyy').parse(product.tanggal_beli);
         }
-        ok = allFieldOk;
+      } catch (_) { originalCreated = null; }
+      try {
+        if (product.tanggal_expired.isNotEmpty) {
+          originalExpired = DateTime.tryParse(product.tanggal_expired) ?? DateFormat('dd/MM/yyyy').parse(product.tanggal_expired);
+        }
+      } catch (_) { originalExpired = null; }
+
+      // Build update map using Firestore master field names
+      final Map<String, dynamic> updateData = {};
+      updateData['nama'] = updated.nama_product;
+      updateData['brand'] = updated.merek_product;
+      updateData['category'] = updated.kategori_product;
+      final int priceVal = int.tryParse(updated.harga_product) ?? 0;
+      updateData['price'] = priceVal;
+      updateData['sellingPrice'] = priceVal;
+
+      // Parse new created date if provided
+      DateTime? newCreated;
+      if (tanggalBeliFormatted.isNotEmpty) {
+        try {
+          // tanggalBeliFormatted is yyyy-MM-dd
+          newCreated = DateTime.parse(tanggalBeliFormatted);
+          updateData['createdAt'] = Timestamp.fromDate(newCreated);
+        } catch (_) {
+          // ignore parse errors
+        }
       }
-    }
 
-    if (ok == true) {
-      debugPrint('Update succeeded');
+      // Compute new expiredDate if original delta exists
+      if (originalCreated != null && originalExpired != null && newCreated != null) {
+        final diff = originalExpired.difference(originalCreated);
+        final newExpired = newCreated.add(diff);
+        updateData['expiredDate'] = '${newExpired.year}-${newExpired.month.toString().padLeft(2,'0')}-${newExpired.day.toString().padLeft(2,'0')}';
+      } else if (controllers['tanggal_expired'] != null && controllers['tanggal_expired']!.text.trim().isNotEmpty) {
+        updateData['expiredDate'] = controllers['tanggal_expired']!.text.trim();
+      }
 
-      // If this product represents multiple "units" (e.g. barcode_list contains unit IDs),
-      // prefer batching updates across all unit `id_product`s using `updateWhereIn` per field.
-      if (product.barcode_list.isNotEmpty) {
-        debugPrint('Detected ${product.barcode_list.length} unit(s) in barcode_list — attempting batch update');
+      // Optional supplier fields if present in controllers
+      if (controllers.containsKey('supplier_id')) updateData['supplierId'] = controllers['supplier_id']!.text.trim();
+      if (controllers.containsKey('supplier_name')) updateData['supplierName'] = controllers['supplier_name']!.text.trim();
 
-        final ids = product.barcode_list.join(',');
-        bool batchAllOk = true;
-        final List<Map<String, dynamic>> batchResults = [];
-
-        // Try updating each field for all unit ids in a single call (per-field batch)
-        for (final entry in fields.entries) {
+        // Production date update
+        if (controllers.containsKey('tanggal_produksi') && controllers['tanggal_produksi']!.text.trim().isNotEmpty) {
+          // attempt to normalize to yyyy-MM-dd
+          final prodText = controllers['tanggal_produksi']!.text.trim();
+          String prodFormatted = prodText;
           try {
-            final okField = await api.updateWhereIn('id_product', ids, entry.key, entry.value, token, project, collection, appid);
-            batchResults.add({'field': entry.key, 'success': okField});
-            debugPrint('batch update field ${entry.key} -> $okField');
-            if (!okField) batchAllOk = false;
-          } catch (e) {
-            debugPrint('Exception batch updating field ${entry.key}: $e');
-            batchResults.add({'field': entry.key, 'success': false, 'error': e.toString()});
-            batchAllOk = false;
-          }
-          await Future.delayed(const Duration(milliseconds: 120));
-        }
-
-        if (batchAllOk) {
-          debugPrint('Batch update succeeded for all fields');
-        } else {
-          debugPrint('Batch update incomplete — falling back to per-unit updates');
-          // Fall back to per-unit update strategy for any remaining updates
-          final List<Map<String, dynamic>> unitResults = [];
-          for (final unitId in product.barcode_list) {
-            bool unitOk = false;
+            // support dd/MM/yyyy or yyyy-MM-dd or 'MMMM d, yyyy'
+            DateTime parsed = DateTime.parse(prodText);
+            prodFormatted = '${parsed.year}-${parsed.month.toString().padLeft(2,'0')}-${parsed.day.toString().padLeft(2,'0')}';
+          } catch (_) {
             try {
-              // Try updateOne by unitId
-              unitOk = await api.updateOne(token, project, collection, appid, unitId.toString(), Map<String, dynamic>.from(fields));
-              debugPrint('unit $unitId updateOne -> $unitOk');
-
-              if (!unitOk) {
-                // Try selectWhere -> updateId fallback
-                try {
-                  final sel = await api.selectWhere(token, project, collection, appid, 'id_product', unitId.toString());
-                  debugPrint('selectWhere for unit $unitId -> $sel');
-                  dynamic parsed;
-                  try {
-                    parsed = sel is String ? jsonDecode(sel) : sel;
-                  } catch (_) {
-                    parsed = null;
-                  }
-                  String serverId = '';
-                  if (parsed != null) {
-                    List docs = [];
-                    if (parsed is List) docs = parsed;
-                    else if (parsed is Map && parsed.containsKey('data') && parsed['data'] is List) docs = parsed['data'];
-                    if (docs.isNotEmpty) {
-                      final doc = docs.first;
-                      if (doc is Map) serverId = (doc['_id'] ?? doc['id'] ?? doc['id_product'] ?? '').toString();
-                    }
-                  }
-                  if (serverId.isNotEmpty) {
-                    final fieldList = fields.keys.join(',');
-                    final valueList = fields.values.map((v) => v.replaceAll(',', '\\,')).join(',');
-                    final retry = await api.updateId(fieldList, valueList, token, project, collection, appid, serverId);
-                    unitOk = retry == true;
-                    debugPrint('unit $unitId updateId via serverId $serverId -> $unitOk');
-                  }
-                } catch (e) {
-                  debugPrint('selectWhere/updateId fallback for unit $unitId failed: $e');
-                }
-              }
-
-              if (!unitOk) {
-                // per-field updateWhere
-                bool allFieldOk = true;
-                for (final entry in fields.entries) {
-                  bool fOk = await api.updateWhere('id_product', unitId.toString(), entry.key, entry.value, token, project, collection, appid);
-                  if (!fOk) {
-                    fOk = await api.updateWhere('_id', unitId.toString(), entry.key, entry.value, token, project, collection, appid);
-                  }
-                  debugPrint('unit $unitId field ${entry.key} updateWhere -> $fOk');
-                  if (!fOk) allFieldOk = false;
-                  await Future.delayed(const Duration(milliseconds: 80));
-                }
-                unitOk = allFieldOk;
-              }
-
-              unitResults.add({'unit': unitId, 'success': unitOk});
-            } catch (e) {
-              debugPrint('Exception updating unit $unitId: $e');
-              unitResults.add({'unit': unitId, 'success': false, 'error': e.toString()});
+              final parsed2 = DateFormat('dd/MM/yyyy').parse(prodText);
+              prodFormatted = '${parsed2.year}-${parsed2.month.toString().padLeft(2,'0')}-${parsed2.day.toString().padLeft(2,'0')}';
+            } catch (_) {
+              try {
+                final parsed3 = DateFormat('MMMM d, yyyy').parse(prodText);
+                prodFormatted = '${parsed3.year}-${parsed3.month.toString().padLeft(2,'0')}-${parsed3.day.toString().padLeft(2,'0')}';
+              } catch (_) {}
             }
-            await Future.delayed(const Duration(milliseconds: 120));
           }
-
-          final failed = unitResults.where((r) => r['success'] != true).toList();
-          if (failed.isNotEmpty) {
-            return {
-              'success': false,
-              'message': 'Beberapa unit gagal diperbarui',
-              'details': unitResults,
-              'product': updated.toJson(),
-            };
-          }
+          updateData['productionDate'] = prodFormatted;
         }
-      }
+
+          // Recompute productKey so masters stay consistent when name/brand/category/productionDate change
+          final String prodForKey = updateData.containsKey('productionDate')
+            ? (updateData['productionDate'] ?? '')
+            : (product.production_date ?? '');
+          final String keyName = updated.nama_product.trim().toLowerCase();
+          final String keyBrand = updated.merek_product.trim().toLowerCase();
+          final String keyCat = updated.kategori_product.trim().toLowerCase();
+          final String productKey = '${keyName}_${keyBrand}_${keyCat}_${prodForKey}';
+          updateData['productKey'] = productKey;
+
+      // Perform Firestore update
+      await firestore.collection('products').doc(docId).update(updateData);
 
       return {'success': true, 'message': 'Produk berhasil diperbarui', 'product': updated.toJson()};
+    } catch (e) {
+      debugPrint('Firestore update failed: $e');
+      return {'success': false, 'message': 'Gagal memperbarui produk: $e'};
     }
-
-    debugPrint('All update attempts failed — attempting to resolve server _id via selectWhere');
-
-    // If we failed to update using provided ids, try to fetch actual document from server
-    // using id_product and retry update with the server-side _id if found.
-    if (product.id_product.isNotEmpty) {
-      try {
-        final selectRes = await api.selectWhere(token, project, collection, appid, 'id_product', product.id_product);
-        debugPrint('selectWhere result: $selectRes');
-
-        // parse response and attempt to extract _id or id
-        dynamic parsed;
-        try {
-          parsed = selectRes is String ? jsonDecode(selectRes) : selectRes;
-        } catch (_) {
-          parsed = null;
-        }
-
-        if (parsed != null) {
-          List docs = [];
-          if (parsed is List) docs = parsed;
-          else if (parsed is Map && parsed.containsKey('data') && parsed['data'] is List) docs = parsed['data'];
-
-          if (docs.isNotEmpty) {
-            final doc = docs.first;
-            String serverId = '';
-            if (doc is Map) {
-              serverId = (doc['_id'] ?? doc['id'] ?? '').toString();
-            }
-
-            if (serverId.isNotEmpty) {
-              debugPrint('Found server id: $serverId — retrying updateId with this id');
-              final fieldList = fields.keys.join(',');
-              final valueList = fields.values.map((v) => v.replaceAll(',', '\\,')).join(',');
-              final retryOk = await api.updateId(fieldList, valueList, token, project, collection, appid, serverId);
-              debugPrint('Retry updateId with serverId -> $retryOk');
-              if (retryOk == true) {
-                return {'success': true, 'message': 'Produk berhasil diperbarui (via server _id)', 'product': updated.toJson()};
-              }
-            }
-          }
-        }
-      } catch (e) {
-        debugPrint('selectWhere fallback failed: $e');
-      }
-    }
-
-    debugPrint('All update attempts (including selectWhere fallback) failed');
-    return {'success': false, 'message': 'Gagal memperbarui produk di server'};
   }
 
   List<String> getAvailableCategories() {

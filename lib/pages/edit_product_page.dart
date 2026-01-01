@@ -31,13 +31,21 @@ class _EditProductPageState extends State<EditProductPage> {
     _controller.initialize(widget.product);
     _controllers = _controller.createControllers();
     
-    // Parse tanggal beli for date picker
+    // Parse tanggal beli for date picker (support multiple formats)
     final tanggalBeliText = _controllers['tanggal_beli']!.text;
     if (tanggalBeliText.isNotEmpty) {
       try {
-        _selectedDate = DateFormat('dd/MM/yyyy').parse(tanggalBeliText);
-      } catch (e) {
-        _selectedDate = null;
+        _selectedDate = DateFormat('MMMM d, yyyy').parse(tanggalBeliText);
+      } catch (_) {
+        try {
+          _selectedDate = DateFormat('dd/MM/yyyy').parse(tanggalBeliText);
+        } catch (_) {
+          try {
+            _selectedDate = DateFormat('yyyy-MM-dd').parse(tanggalBeliText);
+          } catch (_) {
+            _selectedDate = null;
+          }
+        }
       }
     }
   }
@@ -169,38 +177,68 @@ class _EditProductPageState extends State<EditProductPage> {
             // Purchase Date
             _buildDateField(),
             
+            // Production Date picker
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                const Text(
+                  'Tanggal produksi',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: _selectProductionDate,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Icon(Icons.precision_manufacturing_rounded, color: Colors.grey[600]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _controllers['tanggal_produksi']!.text.isEmpty
+                                ? 'Pilih tanggal produksi'
+                                : _controllers['tanggal_produksi']!.text,
+                            style: TextStyle(
+                              color: _controllers['tanggal_produksi']!.text.isEmpty ? Colors.grey[400] : Colors.black87,
+                            ),
+                          ),
+                        ),
+                        Icon(Icons.calendar_month_rounded, color: Colors.blue[700]),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
             // Price
             _buildPriceField(),
             
-            // Stock
+            // Supplier (editable)
             _buildTextField(
-              label: 'Jumlah Stok',
-              controller: _controllers['jumlah_produk']!,
-              icon: Icons.inventory_rounded,
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Jumlah stok harus diisi';
-                }
-                final jumlah = int.tryParse(value);
-                if (jumlah == null || jumlah < 0) {
-                  return 'Jumlah harus berupa angka positif';
-                }
-                return null;
-              },
+              label: 'Supplier',
+              controller: _controllers['supplier_name']!,
+              icon: Icons.store_rounded,
             ),
-            
-            // Expired Date
+
+            // Expired Date (read-only, derived from Created Date)
             _buildTextField(
               label: 'Tanggal Expired',
               controller: _controllers['tanggal_expired']!,
               icon: Icons.calendar_today_rounded,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Tanggal expired harus diisi';
-                }
-                return null;
-              },
+              readOnly: true,
+              enabled: false,
             ),
           ],
         ),
@@ -290,7 +328,9 @@ class _EditProductPageState extends State<EditProductPage> {
 
   Widget _buildCategoryField() {
     final categories = _controller.getAvailableCategories();
-    
+    final current = _controllers['kategori_product']?.text ?? '';
+    final initialCategory = categories.contains(current) ? current : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -308,7 +348,7 @@ class _EditProductPageState extends State<EditProductPage> {
         const SizedBox(height: 8),
         
         DropdownButtonFormField<String>(
-          initialValue: _controllers['kategori_product']!.text,
+          initialValue: initialCategory,
           decoration: InputDecoration(
             prefixIcon: Icon(Icons.category_rounded, color: Colors.grey[600]),
             filled: true,
@@ -392,6 +432,35 @@ class _EditProductPageState extends State<EditProductPage> {
         ),
       ],
     );
+  }
+
+  Future<void> _selectProductionDate() async {
+    final initial = () {
+      try {
+        final txt = _controllers['tanggal_produksi']?.text ?? '';
+        if (txt.isEmpty) return DateTime.now();
+        // try dd/MM/yyyy first
+        try {
+          return DateFormat('dd/MM/yyyy').parse(txt);
+        } catch (_) {}
+        try {
+          return DateFormat('yyyy-MM-dd').parse(txt);
+        } catch (_) {}
+        try {
+          return DateFormat('MMMM d, yyyy').parse(txt);
+        } catch (_) {}
+        return DateTime.now();
+      } catch (_) {
+        return DateTime.now();
+      }
+    }();
+
+    final picked = await _controller.selectDate(context, initialDate: initial);
+    if (picked != null) {
+      setState(() {
+        _controllers['tanggal_produksi']!.text = DateFormat('dd/MM/yyyy').format(picked);
+      });
+    }
   }
 
   Widget _buildPriceField() {

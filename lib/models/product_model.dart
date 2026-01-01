@@ -7,10 +7,12 @@ class ProductModel {
   final String kategori_product;
   final String merek_product;
   final String tanggal_beli;
+  final String production_date;
   final String harga_product;
   final String jumlah_produk;
   final List<String> barcode_list;
   final String tanggal_expired;
+  final String supplier_name;
   final String ownerid;
 
   ProductModel({
@@ -20,6 +22,8 @@ class ProductModel {
     required this.kategori_product,
     required this.merek_product,
     required this.tanggal_beli,
+    required this.production_date,
+    required this.supplier_name,
     required this.harga_product,
     required this.jumlah_produk,
     required this.barcode_list,
@@ -46,6 +50,7 @@ class ProductModel {
       kategori_product: data['kategori_product'] ?? '',
       merek_product: data['merek_product'] ?? '',
       tanggal_beli: data['tanggal_beli'] ?? '',
+      production_date: data['productionDate'] ?? data['tanggal_produksi'] ?? '',
       harga_product: data['harga_product'] ?? '0',
       jumlah_produk: data['jumlah_produk'] ?? '0',
       barcode_list: (() {
@@ -63,6 +68,7 @@ class ProductModel {
         return <String>[];
       })(),
       tanggal_expired: data['tanggal_expired'] ?? '',
+      supplier_name: data['supplierName'] ?? data['supplier_name'] ?? data['supplier'] ?? '',
       ownerid: data['ownerid'] ?? '',
     );
   }
@@ -75,6 +81,8 @@ class ProductModel {
       'kategori_product': kategori_product,
       'merek_product': merek_product,
       'tanggal_beli': tanggal_beli,
+      'productionDate': production_date,
+      'supplierName': supplier_name,
       'harga_product': harga_product,
       'jumlah_produk': jumlah_produk,
       'barcode_list': barcode_list,
