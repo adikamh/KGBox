@@ -1,8 +1,13 @@
+// ignore_for_file: unused_import
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:kgbox/screens/catat_barang_keluar_screen.dart';
 import '../screens/dashboard_staff_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 class DashboardStaffPage extends StatefulWidget {
   final String userRole;
@@ -28,7 +33,11 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeData();
+    // start REST-based polling for dynamic counts (orders live in REST API)
+    _controller.startOrdersPolling(context);
     _controller.addListener(_onControllerUpdated);
+    // ensure an immediate fetch to populate controller count for UI
+    _controller.fetchTodaysOut(context).catchError((e) => debugPrint('init fetchTodaysOut error: $e'));
     _startAutoRefreshTimer();
     _lastAppResumeTime = DateTime.now();
   }
@@ -37,6 +46,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
   void dispose() {
     _refreshTimer?.cancel();
     _controller.removeListener(_onControllerUpdated);
+    _controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -205,15 +215,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
                 ],
               ),
             ),
-            const PopupMenuItem(
-              child: Row(
-                children: [
-                  Icon(Icons.settings, size: 20, color: Colors.grey),
-                  SizedBox(width: 8),
-                  Text('Settings'),
-                ],
-              ),
-            ),
+            
             PopupMenuItem(
               child: const Row(
                 children: [
@@ -511,16 +513,10 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
           color: const Color(0xFF42A5F5),
           onPressed: () => Navigator.pushNamed(context, '/supplier'),
         ),
-        _buildStatCard(
-          icon: Icons.local_shipping_rounded,
-          value: _controller.pengirimanCount.toString(),
-          label: 'Pengiriman',
-          color: const Color(0xFFFF7043),
-          onPressed: () => Navigator.pushNamed(context, '/pengiriman'),
-        ),
+        _buildRealtimePengirimanCard(context),
         _buildStatCard(
           icon: Icons.note_add_rounded,
-          value: _controller.getTotalQuantity().toString(),
+          value: '' ,
           label: 'Produk\nKeluar',
           color: const Color.fromARGB(255, 111, 111, 111),
           onPressed: () async {
@@ -619,6 +615,18 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRealtimePengirimanCard(BuildContext context) {
+    // Orders live in REST API; use controller's polled count only.
+    final count = _controller.pengirimanCount;
+    return _buildStatCard(
+      icon: Icons.local_shipping_rounded,
+      value: count.toString(),
+      label: 'Pengiriman',
+      color: const Color(0xFFFF7043),
+      onPressed: () => Navigator.pushNamed(context, '/pengiriman'),
     );
   }
 

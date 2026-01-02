@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-class PengirimanPage extends StatelessWidget {
+class PengirimanPage extends StatefulWidget {
   final List<Map<String, dynamic>> orders;
   final bool loading;
   final void Function(String alamat) onOpenMap;
   final void Function(Map<String, dynamic> order) onOpenOrder;
+  final Future<void> Function()? onRefresh;
   final String? ownerId;
 
   const PengirimanPage({
@@ -13,26 +14,83 @@ class PengirimanPage extends StatelessWidget {
     required this.loading,
     required this.onOpenMap,
     required this.onOpenOrder,
+    this.onRefresh,
     this.ownerId,
   });
 
   @override
+  State<PengirimanPage> createState() => _PengirimanPageState();
+}
+
+class _PengirimanPageState extends State<PengirimanPage> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _statusFilter = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final filtered = widget.orders.where((order) {
+      final q = _searchCtrl.text.trim().toLowerCase();
+      if (q.isNotEmpty) {
+        final toko = (order['nama_toko'] ?? order['customer_name'] ?? '').toString().toLowerCase();
+        final oid = (order['order_id'] ?? order['orderId'] ?? order['id'] ?? '').toString().toLowerCase();
+        if (!toko.contains(q) && !oid.contains(q)) return false;
+      }
+      if (_statusFilter.isNotEmpty) {
+        final status = (order['status'] ?? '').toString().toLowerCase();
+        if (!status.contains(_statusFilter.toLowerCase())) return false;
+      }
+      return true;
+    }).toList();
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: _buildAppBar(context),
-      body: loading
+      body: widget.loading
           ? _buildLoadingState()
-          : orders.isEmpty
-              ? _buildEmptyState(context)
-              : Column(
-                  children: [
-                    _buildCounterBadge(),
-                    const SizedBox(height: 8),
-                    Expanded(child: _buildOrderList()),
-                  ],
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: 'Cari toko atau order id...',
+                      suffixIcon: _searchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () => setState(() => _searchCtrl.clear()),
+                            )
+                          : null,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
                 ),
+                _buildCounterBadge(),
+                const SizedBox(height: 8),
+                Expanded(child: filtered.isEmpty ? _buildEmptyState(context) : _buildOrderList(filtered)),
+              ],
+            ),
     );
+  }
+
+  String formatRp(dynamic v) {
+    try {
+      final n = int.tryParse(v?.toString() ?? '0') ?? (v is num ? v.toInt() : 0);
+      final s = n.toString();
+      return s.replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+    } catch (_) {
+      return '0';
+    }
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
@@ -57,7 +115,13 @@ class PengirimanPage extends StatelessWidget {
       ),
       centerTitle: true,
       actions: [
-        if (!loading)
+        if (!widget.loading)
+          IconButton(
+          icon: const Icon(Icons.refresh_rounded),
+          onPressed: widget.onRefresh != null ? () => widget.onRefresh!() : null,
+          tooltip: 'Refresh',
+        ),
+        if (!widget.loading)
           IconButton(
             icon: const Icon(Icons.filter_list_rounded),
             onPressed: () => _showFilterDialog(context),
@@ -90,7 +154,7 @@ class PengirimanPage extends StatelessWidget {
           ],
         ),
         content: Text(
-          'Menampilkan ${orders.length} order untuk owner ini',
+          'Menampilkan ${widget.orders.length} order untuk owner ini',
           style: TextStyle(color: Colors.grey[600]),
         ),
         actions: [
@@ -138,7 +202,7 @@ class PengirimanPage extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            '${orders.length} Pengiriman',
+            '${widget.orders.length} Pengiriman',
             style: const TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 15,
@@ -175,23 +239,30 @@ class PengirimanPage extends StatelessWidget {
     );
   }
 
-  Widget _buildOrderList() {
+  Widget _buildOrderList(List<Map<String, dynamic>> list) {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      itemCount: orders.length,
+      itemCount: list.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final order = orders[index];
+        final order = list[index];
         return _buildOrderCard(order, context);
       },
     );
   }
 
   Widget _buildOrderCard(Map<String, dynamic> order, BuildContext context) {
-    final toko = order['nama_toko'] ?? order['customer_name'] ?? 'Toko';
-    final alamat = order['alamat_toko'] ?? '-';
+    final toko = (order['nama_toko'] ?? order['customer_name'] ?? (order['_customer'] is Map ? (order['_customer']['nama_toko'] ?? order['_customer']['nama']) : null) ?? '').toString();
     final tanggal = order['tanggal_order'] ?? '-';
     final status = order['status'] ?? '';
+
+    // normalize alamat: treat '-' or empty as absent
+    final rawAlamat = (order['alamat_toko'] ?? order['customer_address'] ?? (order['_customer'] is Map ? (order['_customer']['alamat_toko'] ?? order['_customer']['alamat']) : null) ?? '').toString();
+    final alamat = (rawAlamat.trim().isEmpty || rawAlamat.trim() == '-' || rawAlamat.trim() == '--') ? '' : rawAlamat;
+
+    // derive item count and total price for a clear summary
+    final itemCount = order['jumlah_produk'] ?? order['total_items'] ?? order['items_count'] ?? order['items'] is List ? (order['items'] as List).length : null;
+    final totalVal = order['total_harga'] ?? order['total'] ?? order['grand_total'] ?? order['subtotal'] ?? '0';
 
     final statusData = _getStatusData(status);
 
@@ -211,7 +282,7 @@ class PengirimanPage extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => onOpenOrder(order),
+          onTap: () => widget.onOpenOrder(order),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -250,7 +321,7 @@ class PengirimanPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            toko,
+                            toko.isNotEmpty ? toko : 'Customer',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
@@ -259,7 +330,15 @@ class PengirimanPage extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              if (itemCount != null) Text('Items: ${itemCount.toString()}', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                              if (itemCount != null) const SizedBox(width: 8),
+                              Text('Total: Rp ${formatRp(totalVal)}', style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
                           if (status.isNotEmpty)
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -287,7 +366,7 @@ class PengirimanPage extends StatelessWidget {
                         Icons.location_on_rounded,
                         color: alamat.isNotEmpty ? Colors.red[600] : Colors.grey[400],
                       ),
-                      onPressed: alamat.isNotEmpty ? () => onOpenMap(alamat) : null,
+                      onPressed: alamat.isNotEmpty ? () => widget.onOpenMap(alamat) : null,
                       tooltip: 'Buka Maps',
                     ),
                   ],
@@ -304,13 +383,15 @@ class PengirimanPage extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      _buildInfoRow(
-                        Icons.location_on_rounded,
-                        'Alamat',
-                        alamat,
-                        Colors.red[600]!,
-                      ),
-                      const SizedBox(height: 10),
+                      if (alamat.isNotEmpty) ...[
+                        _buildInfoRow(
+                          Icons.location_on_rounded,
+                          'Alamat',
+                          alamat,
+                          Colors.red[600]!,
+                        ),
+                        const SizedBox(height: 10),
+                      ],
                       _buildInfoRow(
                         Icons.calendar_today_rounded,
                         'Tanggal Order',
@@ -328,7 +409,7 @@ class PengirimanPage extends StatelessWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => onOpenOrder(order),
+                        onPressed: () => widget.onOpenOrder(order),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.blue[700],
                           side: BorderSide(color: Colors.blue[200]!),
@@ -347,7 +428,7 @@ class PengirimanPage extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: alamat.isNotEmpty ? () => onOpenMap(alamat) : null,
+                        onPressed: alamat.isNotEmpty ? () => widget.onOpenMap(alamat) : null,
                         style: OutlinedButton.styleFrom(
                           foregroundColor: alamat.isNotEmpty ? Colors.red[700] : Colors.grey,
                           side: BorderSide(
@@ -485,7 +566,7 @@ class PengirimanPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              ownerId != null
+                widget.ownerId != null
                   ? 'Belum ada data pengiriman'
                   : 'Belum ada data pengiriman.\nSilakan login terlebih dahulu',
               textAlign: TextAlign.center,
