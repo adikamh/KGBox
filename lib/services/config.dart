@@ -9,3 +9,7 @@ String collectionOrderItems = 'order_items';
 String appid = '69516a03b6d9dc1286056beb';
 String fileUrl = 'https://api.247go.app/v5/';
 
+// Optional Cloud Functions base URL (without trailing slash), e.g.
+// https://us-central1-KGbox.cloudfunctions.net
+String functionsBaseUrl = '';
+

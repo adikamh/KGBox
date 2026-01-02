@@ -8,11 +8,22 @@ exports.dailyExpiryCheck = functions.pubsub.schedule('0 9 * * *')
   .timeZone('Asia/Jakarta')
   .onRun(async (context) => {
     try {
+      let db;
+      try {
+        db = admin.firestore();
+      } catch (err) {
+        console.error('Firestore not available in dailyExpiryCheck:', err);
+        return null;
+      }
       const now = new Date();
       const sevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
       // Query all products and group by ownerid
-      const productsSnap = await admin.firestore().collection('products').get();
+      if (!db || typeof db.collection !== 'function') {
+        console.error('Firestore db or db.collection is not available in dailyExpiryCheck', { db });
+        return null;
+      }
+      const productsSnap = await db.collection('products').get();
       const owners = {};
 
       productsSnap.forEach(doc => {
@@ -48,7 +59,11 @@ exports.dailyExpiryCheck = functions.pubsub.schedule('0 9 * * *')
         }
 
         // fetch tokens for owner
-        const tokensSnap = await admin.firestore().collection('device_tokens').where('ownerid','==', ownerId).get();
+        if (!db || typeof db.collection !== 'function') {
+          console.error('Firestore db or db.collection is not available when fetching device_tokens', { ownerId, db });
+          continue;
+        }
+        const tokensSnap = await db.collection('device_tokens').where('ownerid','==', ownerId).get();
         const tokens = tokensSnap.docs.map(d => d.data().token).filter(t => !!t);
 
         // Build notification message
@@ -79,3 +94,95 @@ exports.dailyExpiryCheck = functions.pubsub.schedule('0 9 * * *')
     }
     return null;
   });
+
+// HTTP endpoint to get expired and near-expiry counts.
+// Query parameter: ?ownerId=<ownerId> to limit to a specific owner.
+exports.getExpiredCounts = functions.https.onRequest(async (req, res) => {
+  try {
+    // Allow CORS from anywhere for simplicity (restrict in production)
+    res.set('Access-Control-Allow-Origin', '*');
+    if (req.method === 'OPTIONS') {
+      res.set('Access-Control-Allow-Methods', 'GET,POST');
+      res.set('Access-Control-Allow-Headers', 'Content-Type');
+      res.status(204).send('');
+      return;
+    }
+
+    const ownerId = (req.query.ownerId || req.body?.ownerId || '').toString();
+    const now = new Date();
+    const sevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const candidates = ['tanggal_expired','tanggal_expire','expiredDate','expired_at','expired_date','expired'];
+
+    // Build base query (guard Firestore availability)
+    let db;
+    try {
+      db = admin.firestore();
+    } catch (err) {
+      console.error('Firestore not available in getExpiredCounts:', err);
+      res.status(500).json({ error: 'Firestore not available', details: err.toString() });
+      return;
+    }
+    let baseQuery = db.collection('products');
+    if (ownerId) baseQuery = baseQuery.where('ownerid','==', ownerId);
+    // select only ownerid and candidate fields to minimize data transferred
+    const selectFields = ['ownerid', ...candidates];
+    if (!db || typeof db.collection !== 'function') {
+      console.error('Firestore db or db.collection is not available in getExpiredCounts', { db });
+      res.status(500).json({ error: 'Firestore not available' });
+      return;
+    }
+    let q = baseQuery.select(...selectFields);
+    let snap;
+    try {
+      snap = await q.get();
+    } catch (err) {
+      console.error('Error executing query in getExpiredCounts:', err);
+      res.status(500).json({ error: 'Query failed', details: err.toString() });
+      return;
+    }
+
+    const perOwner = {};
+    let totalExpired = 0;
+    let totalNear = 0;
+
+    snap.forEach(doc => {
+      const data = doc.data() || {};
+      const owner = data.ownerid || 'global';
+      if (!perOwner[owner]) perOwner[owner] = { expired: 0, near: 0 };
+
+      // find first non-empty expiry field
+      let raw = null;
+      for (const k of candidates) {
+        if (data[k] !== undefined && data[k] !== null && data[k] !== '') { raw = data[k]; break; }
+      }
+      if (!raw) return;
+
+      let expDate = null;
+      try {
+        if (raw._seconds) expDate = new Date(raw._seconds * 1000);
+        else if (typeof raw === 'number') expDate = new Date(raw * 1000);
+        else if (typeof raw === 'string') expDate = new Date(raw);
+      } catch (e) { expDate = null; }
+      if (!expDate || isNaN(expDate.getTime())) return;
+
+      if (expDate < now) {
+        perOwner[owner].expired += 1;
+        totalExpired += 1;
+      } else if (expDate <= sevenDays) {
+        perOwner[owner].near += 1;
+        totalNear += 1;
+      }
+    });
+
+    const result = { total: { expired: totalExpired, near: totalNear }, perOwner };
+    if (ownerId) {
+      const ownerRes = perOwner[ownerId] || { expired: 0, near: 0 };
+      res.json({ ownerId, ...ownerRes });
+    } else {
+      res.json(result);
+    }
+  } catch (e) {
+    console.error('getExpiredCounts error', e);
+    res.status(500).json({ error: e.message || e.toString() });
+  }
+});
