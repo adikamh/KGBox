@@ -22,6 +22,8 @@ class DashboardStaffScreen extends ChangeNotifier {
   int expiredCount = 0;
   int supplierCount = 0;
   int pengirimanCount = 0;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _ordersSub;
+  Timer? _ordersPollTimer;
   
   // Cache untuk mencegah terlalu sering fetch
   DateTime? _lastFetchTime;
@@ -123,12 +125,33 @@ class DashboardStaffScreen extends ChangeNotifier {
         pengirimanCount = orders.length;
         _lastFetchTime = DateTime.now();
         notifyListeners();
-                _lastFetchTime = DateTime.now();
-                notifyListeners();
+          _lastFetchTime = DateTime.now();
+          notifyListeners();
       }
       
     } catch (e) {
       debugPrint('fetchTodaysOut error: $e');
+    }
+  }
+
+  /// Fetch total orders count from REST API (owner filter when available)
+  Future<void> fetchAllOrdersCount(BuildContext context) async {
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser;
+      final ownerId = user?.ownerId ?? user?.id ?? '';
+
+      dynamic res;
+      if (ownerId.isNotEmpty) {
+        res = await _api.selectWhere(token, project, 'order', appid, 'ownerid', ownerId);
+      } else {
+        res = await _api.selectAll(token, project, 'order', appid);
+      }
+      final List<dynamic> list = _parseSelectResponse(res);
+      pengirimanCount = list.length;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('fetchAllOrdersCount error: $e');
     }
   }
 
@@ -295,6 +318,87 @@ class DashboardStaffScreen extends ChangeNotifier {
     } catch (e) {
       debugPrint('fetchMetrics error: $e');
     }
+  }
+
+  /// Start a realtime listener on `order` collection to update pengirimanCount
+  void startRealtimeOrders(BuildContext context) {
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser;
+      final ownerId = user?.ownerId ?? user?.id ?? '';
+      final firestore = FirebaseFirestore.instance;
+
+      Query<Map<String, dynamic>> q = firestore.collection('order');
+      if (ownerId.isNotEmpty) q = q.where('ownerid', isEqualTo: ownerId);
+
+      _ordersSub?.cancel();
+      _ordersSub = q.snapshots().listen((snap) {
+        try {
+          pengirimanCount = snap.size;
+          notifyListeners();
+        } catch (e) {
+          debugPrint('orders snapshot handling error: $e');
+        }
+      }, onError: (e) {
+        debugPrint('orders listener error: $e');
+        // fallback to periodic REST polling if Firestore listener fails (permissions/network)
+        _startOrdersPolling(context);
+      });
+      // Also ensure polling is stopped when snapshot works
+      _stopOrdersPolling();
+    } catch (e) {
+      debugPrint('startRealtimeOrders error: $e');
+    }
+  }
+
+  /// Stop realtime listeners and cleanup
+  void stopRealtimeOrders() {
+    try {
+      _ordersSub?.cancel();
+      _ordersSub = null;
+      _stopOrdersPolling();
+    } catch (e) {
+      debugPrint('stopRealtimeOrders error: $e');
+    }
+  }
+
+  void _startOrdersPolling(BuildContext context, {Duration interval = const Duration(seconds: 30)}) {
+    try {
+      _ordersPollTimer?.cancel();
+      // run immediately then periodically
+      _ordersPollTimer = Timer.periodic(interval, (t) async {
+        try {
+          await fetchAllOrdersCount(context);
+        } catch (e) {
+          debugPrint('orders polling error: $e');
+        }
+      });
+      // also trigger one immediate fetch
+      fetchAllOrdersCount(context);
+    } catch (e) {
+      debugPrint('_startOrdersPolling error: $e');
+    }
+  }
+
+  /// Public API to start polling-only (no Firestore listener)
+  void startOrdersPolling(BuildContext context, {Duration interval = const Duration(seconds: 30)}) {
+    _startOrdersPolling(context, interval: interval);
+  }
+
+  void _stopOrdersPolling() {
+    try {
+      _ordersPollTimer?.cancel();
+      _ordersPollTimer = null;
+    } catch (e) {
+      debugPrint('_stopOrdersPolling error: $e');
+    }
+  }
+
+  /// Dispose resources used by this controller
+  @override
+  void dispose() {
+    stopRealtimeOrders();
+    super.dispose();
   }
 
   // Smart refresh - hanya refresh jika sudah lewat interval tertentu
