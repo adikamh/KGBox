@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 class BestSellerPage extends StatefulWidget {
   final List<Map<String, dynamic>> items;
   final bool loading;
-
-  const BestSellerPage({
+  final Future<void> Function()? onRefresh;
+  BestSellerPage({
     super.key,
     required this.items,
     required this.loading,
+    this.onRefresh,
   });
 
   @override
@@ -369,12 +370,26 @@ class _BestSellerPageState extends State<BestSellerPage> {
                         style: const TextStyle(
                             fontWeight: FontWeight.bold)),
                     const SizedBox(height: 6),
-                    LinearProgressIndicator(
-                      value: percent,
-                      minHeight: 6,
-                      backgroundColor: Colors.grey[200],
-                      valueColor: AlwaysStoppedAnimation(
-                          _getProgressColor(percent * 100)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: LinearProgressIndicator(
+                            value: percent,
+                            minHeight: 6,
+                            backgroundColor: Colors.grey[200],
+                            valueColor: AlwaysStoppedAnimation(_getProgressColor(percent * 100)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('Terjual', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                            Text('$count', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        )
+                      ],
                     )
                   ]),
             ),
