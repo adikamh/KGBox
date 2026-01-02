@@ -1,11 +1,13 @@
+// ignore: unused_import
 import 'dart:convert';
 import 'package:flutter/material.dart';
 // removed http dependency since functionsBaseUrl not used
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:kgbox/screens/catat_barang_keluar_screen.dart';
-import '../pages/dashboard_owner_page.dart';
 // ignore: unused_import
+import 'package:kgbox/screens/catat_barang_keluar_screen.dart';
+// ignore: unused_import
+import '../pages/dashboard_owner_page.dart';
 import '../pages/list_product_page.dart';
 import '../pages/pengiriman_page.dart';
 import 'logout_screen.dart';
@@ -467,6 +469,7 @@ class DashboardOwnerController {
             String rawExpired = '';
             for (final k in candidates2) {
               final value = p??[k];
+              // ignore: unnecessary_null_comparison
               if (value != null && value.toString().isNotEmpty) {
                 rawExpired = value.toString();
                 break;
@@ -608,5 +611,6 @@ class DashboardOwnerController {
 }
 
 extension on String {
+  // ignore: body_might_complete_normally_nullable
   DateTime? toDate() {}
 }

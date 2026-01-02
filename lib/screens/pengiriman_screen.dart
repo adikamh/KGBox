@@ -122,6 +122,8 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
               'nama_toko': order['nama_toko'] ?? order['store_name'] ?? '',
               'alamat_toko': order['alamat_toko'] ?? order['address'] ?? '',
               'no_telepon_customer': order['no_telepon_customer'] ?? order['phone'] ?? '',
+              'latitude': order['latitude'] ?? '',
+              'longitude': order['longitude'] ?? '',
             };
             order['_customer'] = cm;
           }
@@ -237,6 +239,8 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
             'nama_toko': order['nama_toko'] ?? order['store_name'] ?? '',
             'alamat_toko': order['alamat_toko'] ?? order['address'] ?? '',
             'no_telepon_customer': order['no_telepon_customer'] ?? order['phone'] ?? '',
+            'latitude': order['latitude'] ?? '',
+            'longitude': order['longitude'] ?? '',
           };
         }
       }
@@ -252,6 +256,13 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
       }
 
       final totalVal = order['total_harga'] ?? order['total'] ?? order['grand_total'] ?? order['subtotal'] ?? 0;
+
+      // Tambahkan button untuk buka map jika ada alamat
+      final bool hasAddress = (customer['alamat_toko']?.toString().isNotEmpty ?? false) || 
+                             (customer['alamat']?.toString().isNotEmpty ?? false) || 
+                             (customer['address']?.toString().isNotEmpty ?? false);
+      final bool hasCoordinates = (customer['latitude']?.toString().isNotEmpty ?? false) && 
+                                 (customer['longitude']?.toString().isNotEmpty ?? false);
 
       showDialog(
         context: context,
@@ -272,6 +283,22 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
                       Text(customer['alamat_toko'] ?? customer['alamat'] ?? customer['address'] ?? ''),
                       const SizedBox(height: 4),
                       Text('Tel: ${customer['no_telepon_customer'] ?? customer['phone'] ?? ''}'),
+                      
+                      // Button untuk buka map
+                      if (hasAddress || hasCoordinates) ...[
+                        const SizedBox(height: 10),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.map, size: 16),
+                          label: const Text('Buka di Google Maps'),
+                          onPressed: () {
+                            Navigator.pop(ctx); // Tutup dialog detail dulu
+                            _openMap(customer);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 36),
+                          ),
+                        ),
+                      ],
                       const Divider(),
                     ],
 
@@ -312,7 +339,12 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
                 ),
               ),
             ),
-            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Tutup'))],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx), 
+                child: const Text('Tutup')
+              ),
+            ],
           );
         },
       );
@@ -322,9 +354,104 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
     }
   }
 
-  Future<void> _openMap(String alamat) async {
-    final Uri uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(alamat)}');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  // Fungsi yang ditingkatkan untuk membuka Google Maps
+  Future<void> _openMap(Map<String, dynamic> customer) async {
+    try {
+      String? address = customer['alamat_toko'] ?? customer['alamat'] ?? customer['address'];
+      String? latitude = customer['latitude']?.toString();
+      String? longitude = customer['longitude']?.toString();
+      
+      // Cek apakah ada koordinat
+      if (latitude != null && latitude.isNotEmpty && longitude != null && longitude.isNotEmpty) {
+        // Gunakan koordinat jika tersedia (lebih akurat)
+        final Uri uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude');
+        
+        // Coba URL scheme untuk aplikasi Google Maps
+        final Uri appUri = Uri.parse('google.navigation:q=$latitude,$longitude&mode=d');
+        
+        if (await canLaunchUrl(appUri)) {
+          await launchUrl(appUri);
+          debugPrint('Membuka Google Maps dengan koordinat: $latitude,$longitude');
+          return;
+        } else if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+          return;
+        }
+      }
+      
+      // Fallback ke alamat jika tidak ada koordinat
+      if (address != null && address.isNotEmpty) {
+        final Uri uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
+        
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+          debugPrint('Membuka Google Maps dengan alamat: $address');
+        } else {
+          // Fallback lain: coba dengan URL scheme yang berbeda
+          final Uri fallbackUri = Uri.parse('comgooglemaps://?q=${Uri.encodeComponent(address)}');
+          
+          if (await canLaunchUrl(fallbackUri)) {
+            await launchUrl(fallbackUri);
+          } else {
+            // Jika tidak ada aplikasi Google Maps, buka di browser
+            final Uri webUri = Uri.parse('https://maps.google.com/?q=${Uri.encodeComponent(address)}');
+            if (await canLaunchUrl(webUri)) {
+              await launchUrl(webUri);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Tidak dapat membuka Google Maps'))
+              );
+            }
+          }
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Alamat tidak tersedia'))
+        );
+      }
+    } catch (e) {
+      debugPrint('Error opening map: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'))
+      );
+    }
+  }
+  
+  Future<void> _openMapFromAddress(String address) async {
+    try {
+      if (address.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Alamat tidak tersedia'))
+        );
+        return;
+      }
+      
+      final Uri appUri = Uri.parse('comgooglemaps://?q=${Uri.encodeComponent(address)}');
+      final Uri webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
+      
+      if (await canLaunchUrl(appUri)) {
+        await launchUrl(appUri);
+      } 
+      // Fallback ke browser
+      else if (await canLaunchUrl(webUri)) {
+        await launchUrl(webUri);
+      } 
+      else {
+        final Uri fallbackUri = Uri.parse('https://maps.google.com/?q=${Uri.encodeComponent(address)}');
+        if (await canLaunchUrl(fallbackUri)) {
+          await launchUrl(fallbackUri);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Tidak dapat membuka Google Maps'))
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error opening map from address: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'))
+      );
+    }
   }
 
   @override
@@ -334,7 +461,7 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
       child: PengirimanPage(
         orders: _orders,
         loading: _loading,
-        onOpenMap: _openMap,
+        onOpenMap: _openMapFromAddress, 
         onOpenOrder: _openOrderDetail,
         onRefresh: _loadOrders,
         ownerId: _currentOwnerId,
