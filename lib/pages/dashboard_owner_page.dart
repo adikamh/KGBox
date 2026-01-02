@@ -25,6 +25,15 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
   final TextEditingController _barangKeluarController = TextEditingController(text: '189');
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _controller.loadCounts(context);
+      setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
     _totalProdukController.dispose();
     _barangMasukController.dispose();
@@ -64,6 +73,13 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
       ),
       centerTitle: false,
       actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, color: Colors.white),
+          onPressed: () async {
+            await _controller.loadCounts(context);
+            setState(() {});
+          },
+        ),
         IconButton(
           icon: const Icon(Icons.notifications_outlined, color: Colors.white),
           onPressed: () => _controller.showNotifications(context),
@@ -199,6 +215,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // refresh moved to AppBar actions
           _buildTotalProdukSection(),
           const SizedBox(height: 16),
           _buildSmallStatsSection(),
@@ -225,11 +242,10 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
               ),
               const SizedBox(height: 10),
               GestureDetector(
-                onTap: () => _showEditDialog(
-                  context,
-                  controller: _totalProdukController,
-                  title: 'Edit Total Produk',
-                ),
+                onTap: () async {
+                  await _controller.loadCounts(context);
+                  setState(() {});
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
@@ -237,7 +253,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    _totalProdukController.text,
+                    _controller.totalProduk.toString(),
                     style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -249,6 +265,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
             ],
           ),
         ),
+        
         Container(
           width: 48,
           height: 48,
@@ -275,30 +292,30 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
           Expanded(
             child: _buildSmallStatCard(
               title: 'Barang Masuk',
-              value: _barangMasukController.text,
+              value: _controller.barangMasuk.toString(),
               icon: Icons.arrow_downward_rounded,
               color: const Color(0xFF66BB6A),
-              note: 'Dari minggu lalu',
-              onTap: () => _showEditDialog(
-                context,
-                controller: _barangMasukController,
-                title: 'Edit Barang Masuk',
-              ),
+              note: 'Dari minggu lalu', // Tetap per minggu
+              onTap: () async {
+                await _controller.loadCounts(context);
+                setState(() {});
+              },
+              isLoading: _controller.isLoadingCounts,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: _buildSmallStatCard(
               title: 'Barang Keluar',
-              value: _barangKeluarController.text,
+              value: _controller.barangKeluar.toString(),
               icon: Icons.arrow_upward_rounded,
               color: const Color(0xFFEF5350),
-              note: 'Dari minggu lalu',
-              onTap: () => _showEditDialog(
-                context,
-                controller: _barangKeluarController,
-                title: 'Edit Barang Keluar',
-              ),
+              note: 'Total semua', // Diubah menjadi total semua
+              onTap: () async {
+                await _controller.loadCounts(context);
+                setState(() {});
+              },
+              isLoading: _controller.isLoadingCounts,
             ),
           ),
         ],
@@ -313,6 +330,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
     required Color color,
     String? note,
     required VoidCallback onTap,
+    bool isLoading = false,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -340,14 +358,16 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+                isLoading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text(
+                        value,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
                 if (note != null) ...[
                   const SizedBox(height: 4),
                   Text(
@@ -468,7 +488,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
 
   Widget _buildStoreButton() {
     return GestureDetector(
-      onTap: () => _controller.navigateToStoreScreen(context),
+      onTap: () => Navigator.pushNamed(context, '/pengiriman'),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
@@ -477,7 +497,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFEA580C).withOpacity(0.3),
+              color: const Color(0xFFEA580C).withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -486,7 +506,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.note_add_rounded, size: 28, color: Colors.white),
+            Icon(Icons.store, size: 28, color: Colors.white),
             SizedBox(width: 12),
             Text(
               'Toko',
@@ -520,14 +540,16 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Diagram Produk Masuk/Keluar',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
+              Expanded(
+                child: Text(
+                  'Diagram Produk Masuk/Keluar',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               TextButton(
@@ -815,6 +837,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
   }
 
   // Dialog methods
+  // ignore: unused_element
   Future<void> _showEditDialog(
     BuildContext context, {
     required TextEditingController controller,
