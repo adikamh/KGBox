@@ -60,6 +60,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DevicePreview(enabled: true, builder: (context) => const WarehouseApp());
+    return DevicePreview(enabled: false, builder: (context) => const WarehouseApp());
   }
 }
