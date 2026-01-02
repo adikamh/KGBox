@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:kgbox/screens/catat_barang_keluar_screen.dart';
 import '../screens/dashboard_staff_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/fcm_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 
@@ -35,6 +36,8 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
     _initializeData();
     // start REST-based polling for dynamic counts (orders live in REST API)
     _controller.startOrdersPolling(context);
+    // start realtime listener for order_items (produk keluar today)
+    _controller.startRealtimeOrderItems(context);
     _controller.addListener(_onControllerUpdated);
     // ensure an immediate fetch to populate controller count for UI
     _controller.fetchTodaysOut(context).catchError((e) => debugPrint('init fetchTodaysOut error: $e'));
@@ -46,6 +49,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
   void dispose() {
     _refreshTimer?.cancel();
     _controller.removeListener(_onControllerUpdated);
+    _controller.stopRealtimeOrderItems();
     _controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -86,6 +90,10 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
       setState(() => _isRefreshing = true);
       try {
         await _controller.refreshAll(context);
+        // initialize FCM and register token
+        try {
+          await FCMService.instance.initMessaging(context);
+        } catch (_) {}
       } catch (e) {
         debugPrint('Error initializing data: $e');
       } finally {
@@ -311,7 +319,7 @@ class _DashboardStaffPageState extends State<DashboardStaffPage> with WidgetsBin
   }
 
   Widget _buildProdukKeluarCard() {
-    final totalQty = _controller.getTotalQuantity();
+    final totalQty = _controller.todayOrderItemsCount > 0 ? _controller.todayOrderItemsCount : _controller.getTotalQuantity();
     
     return Container(
       decoration: BoxDecoration(

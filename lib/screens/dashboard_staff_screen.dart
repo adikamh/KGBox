@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:kgbox/screens/notifications_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/notifications_service.dart';
 import '../providers/auth_provider.dart';
 import '../pages/barcode_scanner_page.dart';
 import '../pages/tambah_product_page.dart';
@@ -20,9 +21,13 @@ class DashboardStaffScreen extends ChangeNotifier {
   int lowStockCount = 0;
   int bestSellerCount = 0;
   int expiredCount = 0;
+  int nearExpiredCount = 0;
+  int productInToday = 0;
+  int todayOrderItemsCount = 0;
   int supplierCount = 0;
   int pengirimanCount = 0;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _ordersSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _orderItemsSub;
   Timer? _ordersPollTimer;
   
   // Cache untuk mencegah terlalu sering fetch
@@ -89,6 +94,24 @@ class DashboardStaffScreen extends ChangeNotifier {
         }
 
         pengirimanCount = orders.length;
+          // also compute productInToday via Firestore 'product_in' collection if available
+          try {
+            productInToday = 0;
+            final firestore = FirebaseFirestore.instance;
+            final q = await firestore.collection('product_in')
+              .where('tanggal', isGreaterThanOrEqualTo: '$todayKey 00:00:00')
+              .where('tanggal', isLessThanOrEqualTo: '$todayKey 23:59:59')
+              .get();
+            if (q.docs.isNotEmpty) {
+              for (final d in q.docs) {
+                final data = d.data();
+                final qty = int.tryParse((data['qty'] ?? data['jumlah'] ?? data['jumlah_produk'] ?? '0').toString()) ?? 0;
+                productInToday += qty;
+              }
+            }
+          } catch (_) {
+            productInToday = 0;
+          }
         _lastFetchTime = DateTime.now();
         notifyListeners();
         return;
@@ -123,6 +146,24 @@ class DashboardStaffScreen extends ChangeNotifier {
         }
 
         pengirimanCount = orders.length;
+        // compute productInToday for non-owner id path as well
+        try {
+          productInToday = 0;
+          final firestore = FirebaseFirestore.instance;
+          final q = await firestore.collection('product_in')
+            .where('tanggal', isGreaterThanOrEqualTo: '$todayKey 00:00:00')
+            .where('tanggal', isLessThanOrEqualTo: '$todayKey 23:59:59')
+            .get();
+          if (q.docs.isNotEmpty) {
+            for (final d in q.docs) {
+              final data = d.data();
+              final qty = int.tryParse((data['qty'] ?? data['jumlah'] ?? data['jumlah_produk'] ?? '0').toString()) ?? 0;
+              productInToday += qty;
+            }
+          }
+        } catch (_) {
+          productInToday = 0;
+        }
         _lastFetchTime = DateTime.now();
         notifyListeners();
           _lastFetchTime = DateTime.now();
@@ -182,6 +223,7 @@ class DashboardStaffScreen extends ChangeNotifier {
         }
 
         int fsExpired = 0;
+        int fsNear = 0;
         for (final doc in snap.docs) {
           final dataObj = doc.data();
           // lowStock: try common fields
@@ -219,10 +261,32 @@ class DashboardStaffScreen extends ChangeNotifier {
             }
           }
 
-          if (expDate != null && expDate.isBefore(now)) fsExpired++;
+          if (expDate != null) {
+            if (expDate.isBefore(now)) {
+              fsExpired++;
+            } else {
+              final diff = expDate.difference(now).inDays;
+              if (diff >= 0 && diff <= 7) {
+                // within next 7 days -> near-expiry
+                fsNear++;
+              }
+            }
+          }
         }
-
         expiredCount = fsExpired;
+        nearExpiredCount = fsNear;
+        // show local notifications for expired / near-expiry
+        try {
+          await NotificationService.instance.init();
+          if (expiredCount > 0) {
+            await NotificationService.instance.showNotification(1001, 'Produk Kedaluwarsa', 'Ada $expiredCount produk yang sudah kedaluwarsa.');
+          }
+          if (nearExpiredCount > 0) {
+            await NotificationService.instance.showNotification(1002, 'Produk Hampir Kedaluwarsa', '$nearExpiredCount produk akan kedaluwarsa dalam 7 hari.');
+          }
+          // ensure daily reminder (09:00)
+          await NotificationService.instance.ensureDailyScheduled(9, 0);
+        } catch (_) {}
           // Create or update a summary notification for expired products for this owner
           try {
             if (ownerId.isNotEmpty) {
@@ -359,6 +423,113 @@ class DashboardStaffScreen extends ChangeNotifier {
       _stopOrdersPolling();
     } catch (e) {
       debugPrint('stopRealtimeOrders error: $e');
+    }
+  }
+
+  /// Start realtime listener for `order_items` for today's date to update today's keluar count
+  void startRealtimeOrderItems(BuildContext context) {
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser;
+      final ownerId = user?.ownerId ?? user?.id ?? '';
+      final firestore = FirebaseFirestore.instance;
+
+      final now = DateTime.now();
+      final start = DateTime(now.year, now.month, now.day);
+      final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      final tsStart = Timestamp.fromDate(start);
+      final tsEnd = Timestamp.fromDate(end);
+
+      Query<Map<String, dynamic>> q = firestore.collection('order_items');
+      if (ownerId.isNotEmpty) q = q.where('ownerid', isEqualTo: ownerId);
+
+      // Prefer to filter by timestamp field if present; otherwise listen to owner's order_items and filter in-code
+      try {
+        q = q.where('tanggal_order', isGreaterThanOrEqualTo: tsStart).where('tanggal_order', isLessThanOrEqualTo: tsEnd);
+      } catch (_) {
+        // ignore - field may not be a Timestamp
+      }
+
+      _orderItemsSub?.cancel();
+      _orderItemsSub = q.snapshots().listen((snap) {
+        try {
+          int totalQty = 0;
+          for (final doc in snap.docs) {
+            final data = doc.data();
+            // if tanggal_order exists and is not today, skip
+            final rawDate = data['tanggal_order'] ?? data['created_at'] ?? data['tanggal'];
+            if (rawDate != null) {
+              DateTime? d;
+              if (rawDate is Timestamp) {
+                d = rawDate.toDate();
+              } else if (rawDate is String) {
+                // Accept formats like "yyyy-MM-dd" or "yyyy-MM-dd HH:mm:ss"
+                try {
+                  d = DateTime.parse(rawDate);
+                } catch (_) {
+                  try {
+                    final sub = rawDate.trim().split(' ').first;
+                    d = DateTime.parse(sub);
+                  } catch (_) {
+                    d = null;
+                  }
+                }
+              }
+              if (d != null) {
+                if (!(d.year == now.year && d.month == now.month && d.day == now.day)) continue;
+              }
+            }
+
+            // Determine quantity: prefer `jumlah_produk`, otherwise length of `list_barcode`, otherwise fallback fields
+            int qty = 0;
+            try {
+              if (data.containsKey('jumlah_produk')) {
+                qty = int.tryParse(data['jumlah_produk']?.toString() ?? '0') ?? 0;
+              } else if (data.containsKey('list_barcode')) {
+                final lb = data['list_barcode'];
+                if (lb is List) {
+                  qty = lb.length;
+                } else if (lb is String) {
+                  // try to decode JSON array string
+                  try {
+                    final parsed = jsonDecode(lb);
+                    if (parsed is List) qty = parsed.length;
+                  } catch (_) {
+                    // fallback: bracket-less comma separated
+                    qty = lb.split(',').where((s) => s.trim().isNotEmpty).length;
+                  }
+                }
+              } else {
+                qty = int.tryParse((data['qty'] ?? data['jumlah'] ?? '0').toString()) ?? 0;
+              }
+            } catch (_) {
+              qty = 0;
+            }
+
+            totalQty += qty;
+          }
+          todayOrderItemsCount = totalQty;
+          // update _todaysOut entry
+          _todaysOut.removeWhere((e) => (e['name'] ?? '') == 'Pengiriman Hari Ini');
+          if (todayOrderItemsCount > 0) _todaysOut.add({'name': 'Pengiriman Hari Ini', 'qty': todayOrderItemsCount, 'note': ''});
+          notifyListeners();
+        } catch (e) {
+          debugPrint('order_items snapshot handling error: $e');
+        }
+      }, onError: (e) {
+        debugPrint('order_items listener error: $e');
+      });
+    } catch (e) {
+      debugPrint('startRealtimeOrderItems error: $e');
+    }
+  }
+
+  void stopRealtimeOrderItems() {
+    try {
+      _orderItemsSub?.cancel();
+      _orderItemsSub = null;
+    } catch (e) {
+      debugPrint('stopRealtimeOrderItems error: $e');
     }
   }
 

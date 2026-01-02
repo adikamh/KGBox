@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
@@ -48,11 +49,13 @@ class _BestSellerScreenState extends State<BestSellerScreen> {
       for (final entry in list) {
         final idProd = (entry['id_product'] ?? '').toString();
         try {
-          final prodRes = await _api.selectWhere(token, project, 'product', appid, 'id_product', idProd).timeout(const Duration(seconds: 10));
-          final prodJson = json.decode(prodRes);
-          final prodData = (prodJson['data'] ?? []);
-          if (prodData.isNotEmpty) {
-            final p = prodData[0] as Map<String, dynamic>;
+          final snap = await FirebaseFirestore.instance
+              .collection('products')
+              .where('id_product', isEqualTo: idProd)
+              .limit(1)
+              .get();
+          if (snap.docs.isNotEmpty) {
+            final p = snap.docs.first.data();
             entry['nama'] = p['nama_product'] ?? p['nama'] ?? idProd;
           } else {
             entry['nama'] = entry['sample']?['nama'] ?? idProd;
@@ -74,6 +77,6 @@ class _BestSellerScreenState extends State<BestSellerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BestSellerPage(items: _items, loading: _loading);
+    return BestSellerPage(items: _items, loading: _loading, onRefresh: _loadBestSellers);
   }
 }
