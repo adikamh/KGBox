@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import 'logout_screen.dart';
 import '../../pages/dashboard_owner_page.dart';
 import '../../pages/dashboard_staff_page.dart';
 import '../../pages/login_page.dart';
+import 'pop_up_Screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -33,29 +33,27 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (result.success) {
-      await showSuccessDialog(
+      await showLoginSuccessPopUp(
         navigator.context,
-        title: 'Login Berhasil',
-        message: 'Anda berhasil masuk ke akun Anda.',
-        onOk: () {
-            if (authProvider.isOwner) {
-              navigator.pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => DashboardOwnerPage(
-                    userRole: authProvider.currentUser?.role.name ?? 'owner',
-                  ),
+        onComplete: () {
+          if (authProvider.isOwner) {
+            navigator.pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => DashboardOwnerPage(
+                  userRole: authProvider.currentUser?.role.name ?? 'owner',
                 ),
-              );
-            } else {
-              navigator.pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => DashboardStaffPage(
-                    userRole: authProvider.currentUser?.role.name ?? 'staff',
-                  ),
+              ),
+            );
+          } else {
+            navigator.pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => DashboardStaffPage(
+                  userRole: authProvider.currentUser?.role.name ?? 'staff',
                 ),
-              );
-            }
-          },
+              ),
+            );
+          }
+        },
       );
     } else {
       messenger.showSnackBar(SnackBar(content: Text(result.message!)));
