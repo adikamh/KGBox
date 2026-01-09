@@ -244,6 +244,7 @@ class AddProductScreen {
           await _firestore.collection('product_barcodes').doc(b).set({
             'productId': masterId,
             'scannedAt': scannedAt,
+            'ownerId': ownerId ?? '',
           });
           // delete from temp
           try { await tdoc.reference.delete(); } catch (_) {}
@@ -260,6 +261,7 @@ class AddProductScreen {
           await _firestore.collection('product_barcodes').doc(barcode.trim()).set({
             'productId': masterId,
             'scannedAt': FieldValue.serverTimestamp(),
+            'ownerId': ownerId ?? '',
           });
           results.add({'barcode': barcode, 'success': true});
         } catch (e) {
