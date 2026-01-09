@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
@@ -30,40 +29,20 @@ class _BestSellerScreenState extends State<BestSellerScreen> {
       final jsonRes = json.decode(res);
       final data = List<Map<String, dynamic>>.from(jsonRes['data'] ?? []);
 
-      // aggregate by id_product
+      // aggregate by nama_produk (from order_items)
       final Map<String, Map<String, dynamic>> agg = {};
       for (final it in data) {
-        final id = (it['id_product'] ?? '').toString();
+        final productName = (it['nama_produk'] ?? it['id_product'] ?? '').toString();
         final qty = int.tryParse(it['jumlah_produk']?.toString() ?? '0') ?? 0;
-        if (agg.containsKey(id)) {
-          agg[id]!['count'] = (agg[id]!['count'] as int) + qty;
+        if (agg.containsKey(productName)) {
+          agg[productName]!['count'] = (agg[productName]!['count'] as int) + qty;
         } else {
-          agg[id] = {'id_product': id, 'count': qty, 'sample': it};
+          agg[productName] = {'nama': productName, 'id_product': it['id_product'] ?? '', 'count': qty, 'sample': it};
         }
       }
 
       final list = agg.values.toList();
       list.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
-
-      // enrich with product name by fetching product records
-      for (final entry in list) {
-        final idProd = (entry['id_product'] ?? '').toString();
-        try {
-          final snap = await FirebaseFirestore.instance
-              .collection('products')
-              .where('id_product', isEqualTo: idProd)
-              .limit(1)
-              .get();
-          if (snap.docs.isNotEmpty) {
-            final p = snap.docs.first.data();
-            entry['nama'] = p['nama_product'] ?? p['nama'] ?? idProd;
-          } else {
-            entry['nama'] = entry['sample']?['nama'] ?? idProd;
-          }
-        } catch (_) {
-          entry['nama'] = entry['sample']?['nama'] ?? idProd;
-        }
-      }
 
       setState(() {
         _items = List<Map<String, dynamic>>.from(list);

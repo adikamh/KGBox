@@ -53,99 +53,98 @@ class DashboardStaffScreen extends ChangeNotifier {
       
       _todaysOut.clear();
       
-      // Query orders hari ini (filter by ownerId when available)
-      // ignore: unused_local_variable
-      dynamic ordersRes;
-      if (ownerId.isNotEmpty) {
-        ordersRes = await _api.selectWhereLike(token, project, 'order', appid, 'tanggal_order', '$todayKey%');
-        // Note: selectWhereLike doesn't support owner filter, so retrieve orders by owner and then filter by date below
-        final ownerOrdersRes = await _api.selectWhere(token, project, 'order', appid, 'ownerid', ownerId);
-        final ownerOrders = _parseSelectResponse(ownerOrdersRes);
-        final dateOrders = _parseSelectResponse(await _api.selectWhereLike(token, project, 'order', appid, 'tanggal_order', todayKey));
-        // intersect by order_id
-        final ownerOrderIds = ownerOrders.map((o) => (o['order_id'] ?? o['orderId'] ?? '').toString()).toSet();
-        final filtered = dateOrders.where((o) => ownerOrderIds.contains((o['order_id'] ?? o['orderId'] ?? '').toString())).toList();
-        // use filtered as orders
-        final List<dynamic> orders = filtered;
+      // Query order_items langsung dengan filter tanggal hari ini
+      try {
+        final api = DataService();
         
-        int totalQuantity = 0;
-        for (final order in orders) {
-          final orderId = (order['order_id'] ?? order['orderId'] ?? '').toString();
-
-          // Query order items untuk order ini
-          if (orderId.isNotEmpty) {
-            final itemsRes = await _api.selectWhere(token, project, 'order_items', appid, 'order_id', orderId);
-            final List<dynamic> items = _parseSelectResponse(itemsRes);
-
-            for (final item in items) {
-              final qty = int.tryParse(item['jumlah_produk']?.toString() ?? '0') ?? 0;
-              totalQuantity += qty;
-            }
-          }
+        // Fetch all order_items (REST API doesn't support complex date filtering)
+        final itemsRes = await api.selectAll(token, project, 'order_items', appid).timeout(const Duration(seconds: 15));
+        final List<dynamic> allItems = _parseSelectResponse(itemsRes);
+        
+        // Filter by owner if available
+        List<dynamic> ownerItems = allItems;
+        if (ownerId.isNotEmpty) {
+          ownerItems = allItems.where((item) {
+            final itemOwner = (item['ownerid'] ?? item['ownerid'] ?? '').toString();
+            return itemOwner == ownerId;
+          }).toList();
         }
-
-        // Simpan sebagai 1 entry untuk hari ini
-        if (totalQuantity > 0) {
-          _todaysOut.add({
-            'name': 'Pengiriman Hari Ini',
-            'qty': totalQuantity,
-            'note': '${orders.length} transaksi'
-          });
-        }
-
-        pengirimanCount = orders.length;
-          // also compute productInToday via Firestore 'product_in' collection if available
-          try {
-            productInToday = 0;
-            final firestore = FirebaseFirestore.instance;
-            final q = await firestore.collection('product_in')
-              .where('tanggal', isGreaterThanOrEqualTo: '$todayKey 00:00:00')
-              .where('tanggal', isLessThanOrEqualTo: '$todayKey 23:59:59')
-              .get();
-            if (q.docs.isNotEmpty) {
-              for (final d in q.docs) {
-                final data = d.data();
-                final qty = int.tryParse((data['qty'] ?? data['jumlah'] ?? data['jumlah_produk'] ?? '0').toString()) ?? 0;
-                productInToday += qty;
+        
+        // Filter by tanggal_order_items (today)
+        int totalQty = 0;
+        final Set<String> uniqueProductIds = {};
+        
+        for (final item in ownerItems) {
+          final rawDate = item['tanggal_order_items'] ?? item['tanggal_order'] ?? item['created_at'];
+          if (rawDate != null) {
+            DateTime? d;
+            if (rawDate is String) {
+              try {
+                d = DateTime.parse(rawDate.toString().trim());
+              } catch (_) {
+                try {
+                  final sub = rawDate.toString().trim().split(' ').first;
+                  d = DateTime.parse(sub);
+                } catch (_) {
+                  d = null;
+                }
               }
             }
-          } catch (_) {
-            productInToday = 0;
+            
+            // Only include if date is today
+            if (d != null && (d.year == now.year && d.month == now.month && d.day == now.day)) {
+              // Track unique product id
+              final productId = (item['id_product'] ?? '').toString();
+              if (productId.isNotEmpty) {
+                uniqueProductIds.add(productId);
+              }
+              
+              // Sum quantities
+              final qty = int.tryParse(item['jumlah_produk']?.toString() ?? '0') ?? 0;
+              totalQty += qty;
+            }
           }
+        }
+        
+        // Simpan sebagai 1 entry untuk hari ini
+        if (uniqueProductIds.isNotEmpty) {
+          _todaysOut.add({
+            'name': 'Produk Keluar Hari Ini',
+            'qty': uniqueProductIds.length,
+            'note': '$totalQty unit'
+          });
+        }
+        
+        pengirimanCount = uniqueProductIds.length;
+        
+        // also compute productInToday via Firestore 'product_in' collection if available
+        try {
+          productInToday = 0;
+          final firestore = FirebaseFirestore.instance;
+          final q = await firestore.collection('product_in')
+            .where('tanggal', isGreaterThanOrEqualTo: '$todayKey 00:00:00')
+            .where('tanggal', isLessThanOrEqualTo: '$todayKey 23:59:59')
+            .get();
+          if (q.docs.isNotEmpty) {
+            for (final d in q.docs) {
+              final data = d.data();
+              final qty = int.tryParse((data['qty'] ?? data['jumlah'] ?? data['jumlah_produk'] ?? '0').toString()) ?? 0;
+              productInToday += qty;
+            }
+          }
+        } catch (_) {
+          productInToday = 0;
+        }
         _lastFetchTime = DateTime.now();
         notifyListeners();
         return;
-      } else {
-        // Query orders hari ini
-        final ordersRes = await _api.selectWhereLike(token, project, 'order', appid, 'tanggal_order', todayKey);
-        final List<dynamic> orders = _parseSelectResponse(ordersRes);
-        
-        int totalQuantity = 0;
-        for (final order in orders) {
-          final orderId = (order['order_id'] ?? order['orderId'] ?? '').toString();
-
-          // Query order items untuk order ini
-          if (orderId.isNotEmpty) {
-            final itemsRes = await _api.selectWhere(token, project, 'order_items', appid, 'order_id', orderId);
-            final List<dynamic> items = _parseSelectResponse(itemsRes);
-
-            for (final item in items) {
-              final qty = int.tryParse(item['jumlah_produk']?.toString() ?? '0') ?? 0;
-              totalQuantity += qty;
-            }
-          }
-        }
-
-        // Simpan sebagai 1 entry untuk hari ini
-        if (totalQuantity > 0) {
-          _todaysOut.add({
-            'name': 'Pengiriman Hari Ini',
-            'qty': totalQuantity,
-            'note': '${orders.length} transaksi'
-          });
-        }
-
-        pengirimanCount = orders.length;
+      } catch (e) {
+        debugPrint('Error fetching todays out: $e');
+      }
+      
+      _lastFetchTime = DateTime.now();
+      notifyListeners();
+      return;
         // compute productInToday for non-owner id path as well
         try {
           productInToday = 0;
@@ -166,10 +165,6 @@ class DashboardStaffScreen extends ChangeNotifier {
         }
         _lastFetchTime = DateTime.now();
         notifyListeners();
-          _lastFetchTime = DateTime.now();
-          notifyListeners();
-      }
-      
     } catch (e) {
       debugPrint('fetchTodaysOut error: $e');
     }
@@ -443,31 +438,39 @@ class DashboardStaffScreen extends ChangeNotifier {
       Query<Map<String, dynamic>> q = firestore.collection('order_items');
       if (ownerId.isNotEmpty) q = q.where('ownerid', isEqualTo: ownerId);
 
-      // Prefer to filter by timestamp field if present; otherwise listen to owner's order_items and filter in-code
+      // Filter by tanggal_order_items (primary field for item timestamp)
       try {
-        q = q.where('tanggal_order', isGreaterThanOrEqualTo: tsStart).where('tanggal_order', isLessThanOrEqualTo: tsEnd);
+        q = q.where('tanggal_order_items', isGreaterThanOrEqualTo: tsStart).where('tanggal_order_items', isLessThanOrEqualTo: tsEnd);
       } catch (_) {
-        // ignore - field may not be a Timestamp
+        // Fallback: try tanggal_order if tanggal_order_items not available
+        try {
+          q = q.where('tanggal_order', isGreaterThanOrEqualTo: tsStart).where('tanggal_order', isLessThanOrEqualTo: tsEnd);
+        } catch (_) {
+          // ignore - field may not be a Timestamp
+        }
       }
 
       _orderItemsSub?.cancel();
       _orderItemsSub = q.snapshots().listen((snap) {
         try {
           int totalQty = 0;
+          final Set<String> uniqueProductIds = {};
+          
           for (final doc in snap.docs) {
             final data = doc.data();
-            // if tanggal_order exists and is not today, skip
-            final rawDate = data['tanggal_order'] ?? data['created_at'] ?? data['tanggal'];
+            // if tanggal_order_items exists and is not today, skip (double-check just in case)
+            final rawDate = data['tanggal_order_items'] ?? data['tanggal_order'] ?? data['created_at'] ?? data['tanggal'];
             if (rawDate != null) {
               DateTime? d;
               if (rawDate is Timestamp) {
                 d = rawDate.toDate();
               } else if (rawDate is String) {
-                // Accept formats like "yyyy-MM-dd" or "yyyy-MM-dd HH:mm:ss"
+                // Accept formats like "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-ddTHH:mm:ss"
                 try {
-                  d = DateTime.parse(rawDate);
+                  d = DateTime.parse(rawDate.trim());
                 } catch (_) {
                   try {
+                    // Fallback: try extracting just the date part (YYYY-MM-DD)
                     final sub = rawDate.trim().split(' ').first;
                     d = DateTime.parse(sub);
                   } catch (_) {
@@ -478,6 +481,12 @@ class DashboardStaffScreen extends ChangeNotifier {
               if (d != null) {
                 if (!(d.year == now.year && d.month == now.month && d.day == now.day)) continue;
               }
+            }
+
+            // Track unique product id
+            final productId = (data['id_product'] ?? '').toString();
+            if (productId.isNotEmpty) {
+              uniqueProductIds.add(productId);
             }
 
             // Determine quantity: prefer `jumlah_produk`, otherwise length of `list_barcode`, otherwise fallback fields
@@ -508,10 +517,18 @@ class DashboardStaffScreen extends ChangeNotifier {
 
             totalQty += qty;
           }
-          todayOrderItemsCount = totalQty;
+          
+          // Set the count to number of unique products (jenis produk yang keluar)
+          todayOrderItemsCount = uniqueProductIds.length;
           // update _todaysOut entry
-          _todaysOut.removeWhere((e) => (e['name'] ?? '') == 'Pengiriman Hari Ini');
-          if (todayOrderItemsCount > 0) _todaysOut.add({'name': 'Pengiriman Hari Ini', 'qty': todayOrderItemsCount, 'note': ''});
+          _todaysOut.removeWhere((e) => (e['name'] ?? '') == 'Produk Keluar Hari Ini');
+          if (todayOrderItemsCount > 0) {
+            _todaysOut.add({
+              'name': 'Produk Keluar Hari Ini',
+              'qty': todayOrderItemsCount,
+              'note': '$totalQty unit'
+            });
+          }
           notifyListeners();
         } catch (e) {
           debugPrint('order_items snapshot handling error: $e');

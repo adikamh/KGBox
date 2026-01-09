@@ -672,6 +672,135 @@ class DashboardOwnerController {
     }
   }
 
+  /// Fetch monthly transaction counts (and optionally totals) from REST API `order` collection
+  /// Filters by `ownerid` and aggregates per month for the last 12 months.
+  Future<List<Map<String, dynamic>>> fetchFinancialMonthlyTotals(String ownerId) async {
+    final now = DateTime.now();
+    final months = List.generate(12, (i) {
+      final dt = DateTime(now.year, now.month - (11 - i), 1);
+      return DateTime(dt.year, dt.month);
+    });
+
+    // initialize output with month labels and zero counts
+    final monthNames = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    final colors = _monthlyTransactions.map((e) => e['color'] as Color).toList();
+    final out = List<Map<String, dynamic>>.generate(12, (i) => {
+      'month': monthNames[i],
+      'transactions': 0,
+      'total': 0.0,
+      'color': colors.length > i ? colors[i] : const Color(0xFF3B82F6),
+    });
+
+    try {
+      // fetch orders from REST API filtered by ownerid
+      final apiToken = token;
+      final projectName = project;
+      final app = appid;
+      dynamic raw;
+      try {
+        raw = await _api.selectWhere(apiToken, projectName, 'order', app, 'ownerid', ownerId);
+      } catch (e) {
+        raw = [];
+      }
+
+      List<dynamic> orders = [];
+      try {
+        if (raw is String) {
+          final parsed = jsonDecode(raw);
+          if (parsed is Map && parsed.containsKey('data')) orders = parsed['data'] as List<dynamic>;
+          else if (parsed is List) orders = parsed;
+        } else if (raw is List) {
+          orders = raw;
+        } else if (raw is Map && raw.containsKey('data')) {
+          orders = raw['data'] as List<dynamic>;
+        }
+      } catch (_) {
+        orders = [];
+      }
+
+      for (final od in orders) {
+        if (od is! Map) continue;
+        final data = od as Map<String, dynamic>;
+        // ensure owner filter
+        final ownerField = data['ownerid'] ?? data['owner_id'] ?? data['ownerId'];
+        if (ownerField == null || ownerField.toString() != ownerId) continue;
+
+        // parse date from `tanggal_order` or fallbacks
+        DateTime? dt;
+        final dateCandidates = ['tanggal_order', 'tanggal', 'order_date', 'date', 'created_at'];
+        for (final k in dateCandidates) {
+          if (data.containsKey(k) && data[k] != null) {
+            final v = data[k];
+            if (v is String) {
+              try { dt = DateTime.parse(v); break; } catch (_) {}
+            }
+            if (v is Timestamp) { dt = v.toDate(); break; }
+          }
+        }
+        if (dt == null) continue;
+
+        // only last 12 months
+        final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
+        if (idx < 0) continue;
+
+        // increment transaction count
+        out[idx]['transactions'] = (out[idx]['transactions'] as int) + 1;
+
+        // add total_harga if present
+        final totalRaw = data['total_harga'] ?? data['total'] ?? data['grand_total'];
+        double amt = 0.0;
+        if (totalRaw != null) {
+          if (totalRaw is num) amt = totalRaw.toDouble();
+          else if (totalRaw is String) {
+            amt = double.tryParse(totalRaw.replaceAll(',', '')) ?? 0.0;
+          }
+        }
+        out[idx]['total'] = (out[idx]['total'] as double) + amt;
+      }
+    } catch (e) {
+      debugPrint('fetchFinancialMonthlyTotals error: $e');
+    }
+
+    return out;
+  }
+
+  /// Count unique customers in `order` REST collection for given ownerId
+  Future<int> fetchTotalCustomers(String ownerId) async {
+    try {
+      final apiToken = token;
+      final projectName = project;
+      final app = appid;
+      dynamic raw;
+      try {
+        raw = await _api.selectWhere(apiToken, projectName, 'order', app, 'ownerid', ownerId);
+      } catch (_) {
+        raw = [];
+      }
+
+      List<dynamic> orders = [];
+      try {
+        if (raw is String) {
+          final parsed = jsonDecode(raw);
+          if (parsed is Map && parsed.containsKey('data')) orders = parsed['data'] as List<dynamic>;
+          else if (parsed is List) orders = parsed;
+        } else if (raw is List) orders = raw;
+        else if (raw is Map && raw.containsKey('data')) orders = raw['data'] as List<dynamic>;
+      } catch (_) { orders = []; }
+
+      final customers = <String>{};
+      for (final od in orders) {
+        if (od is! Map) continue;
+        final data = od as Map<String, dynamic>;
+        final cid = data['customor_id'] ?? data['customerId'] ?? data['customer'];
+        if (cid != null) customers.add(cid.toString());
+      }
+      return customers.length;
+    } catch (e) {
+      debugPrint('fetchTotalCustomers error: $e');
+      return 0;
+    }
+  }
+
   // Helper methods
   String getMonthName(int month) {
     switch (month) {
@@ -853,27 +982,128 @@ class DashboardOwnerController {
       return DateTime(dt.year, dt.month);
     });
 
-    // 1. Product barcodes (incoming)
+    // 1. Product barcodes (incoming) - per owner
     try {
       final startTs = Timestamp.fromDate(start);
-      QuerySnapshot<Map<String, dynamic>> pbSnap;
-      try {
-        pbSnap = await _fs.collection('product_barcodes').where('scannedAt', isGreaterThanOrEqualTo: startTs).get();
-      } catch (_) {
-        pbSnap = await _fs.collection('product_barcodes').get();
+      QuerySnapshot<Map<String, dynamic>>? pbSnap;
+      
+      // Try with owner field variants
+      final ownerFields = ['ownerid', 'ownerId', 'owner', 'owner_id'];
+      Exception? lastError;
+      
+      for (final ownerField in ownerFields) {
+        try {
+          pbSnap = await _fs.collection('product_barcodes')
+            .where(ownerField, isEqualTo: ownerId)
+            .where('scannedAt', isGreaterThanOrEqualTo: startTs)
+            .get();
+          debugPrint('fetchMonthlyTotals: Successfully queried product_barcodes with ownerField=$ownerField');
+          break;
+        } catch (e) {
+          lastError = e as Exception;
+          debugPrint('fetchMonthlyTotals: Failed with ownerField=$ownerField: $e');
+          pbSnap = null;
+        }
+      }
+      
+      // If owner field filtering fails, try to get all and filter by productId
+      if (pbSnap == null || pbSnap!.docs.isEmpty) {
+        debugPrint('fetchMonthlyTotals: Falling back to productId-based filtering');
+        try {
+          // Get products for this owner
+          final prods = await _fs.collection('products')
+            .where('ownerid', isEqualTo: ownerId)
+            .get();
+          
+          if (prods.docs.isEmpty) {
+            // Try alternate field names for products
+            final alternateProducts = await _fs.collection('products')
+              .where('ownerId', isEqualTo: ownerId)
+              .get();
+            
+            final productIds = alternateProducts.docs
+              .map((d) => d['id'] ?? d['product_id'] ?? d.id)
+              .whereType<String>()
+              .toList();
+            
+            if (productIds.isNotEmpty && productIds.length <= 10) {
+              pbSnap = await _fs.collection('product_barcodes')
+                .where('productId', whereIn: productIds)
+                .get();
+            } else if (productIds.isNotEmpty) {
+              // For large lists, fetch all and filter in memory
+              final allBarcodes = await _fs.collection('product_barcodes').get();
+              final filteredDocs = allBarcodes.docs.where((d) => 
+                productIds.contains(d['productId']) || 
+                productIds.contains(d['product_id'])
+              ).toList();
+              
+              for (final doc in filteredDocs) {
+                final data = doc.data();
+                DateTime? dt;
+                if (data['scannedAt'] is Timestamp) dt = (data['scannedAt'] as Timestamp).toDate();
+                else if (data['scannedAt'] is String) {
+                  try { dt = DateTime.parse(data['scannedAt']); } catch (_) {}
+                }
+                if (dt == null || dt.isBefore(start)) continue;
+
+                final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
+                if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
+              }
+              pbSnap = null;
+            }
+          } else {
+            final productIds = prods.docs
+              .map((d) => d['id'] ?? d['product_id'] ?? d.id)
+              .whereType<String>()
+              .toList();
+            
+            if (productIds.isNotEmpty && productIds.length <= 10) {
+              pbSnap = await _fs.collection('product_barcodes')
+                .where('productId', whereIn: productIds)
+                .get();
+            } else if (productIds.isNotEmpty) {
+              // For large lists, fetch all and filter in memory
+              final allBarcodes = await _fs.collection('product_barcodes').get();
+              final filteredDocs = allBarcodes.docs.where((d) => 
+                productIds.contains(d['productId']) || 
+                productIds.contains(d['product_id'])
+              ).toList();
+              
+              for (final doc in filteredDocs) {
+                final data = doc.data();
+                DateTime? dt;
+                if (data['scannedAt'] is Timestamp) dt = (data['scannedAt'] as Timestamp).toDate();
+                else if (data['scannedAt'] is String) {
+                  try { dt = DateTime.parse(data['scannedAt']); } catch (_) {}
+                }
+                if (dt == null || dt.isBefore(start)) continue;
+
+                final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
+                if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
+              }
+              pbSnap = null;
+            }
+          }
+        } catch (e) {
+          debugPrint('fetchMonthlyTotals: productId-based fallback error: $e');
+        }
       }
 
-      for (final doc in pbSnap.docs) {
-        final data = doc.data();
-        DateTime? dt;
-        if (data['scannedAt'] is Timestamp) dt = (data['scannedAt'] as Timestamp).toDate();
-        else if (data['scannedAt'] is String) {
-          try { dt = DateTime.parse(data['scannedAt']); } catch (_) {}
-        }
-        if (dt == null || dt.isBefore(start)) continue;
+      // ignore: unnecessary_null_comparison
+      if (pbSnap != null) {
+        for (final doc in pbSnap.docs) {
+          final data = doc.data();
+          DateTime? dt;
+          if (data['scannedAt'] is Timestamp) dt = (data['scannedAt'] as Timestamp).toDate();
+          else if (data['scannedAt'] is String) {
+            try { dt = DateTime.parse(data['scannedAt']); } catch (_) {}
+          }
+          if (dt == null || dt.isBefore(start)) continue;
 
-        final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
-        if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
+          final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
+          if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
+        }
       }
     } catch (e) {
       debugPrint('fetchMonthlyTotals: product_barcodes error: $e');

@@ -1,8 +1,9 @@
-// ignore_for_file: unused_local_variable
+// ignore_for_file: unused_local_variable, unused_element
 
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:kgbox/pages/kelola_staff_page.dart';
+import 'package:intl/intl.dart';
 import 'package:kgbox/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import '../screens/dashboard_owner_screen.dart';
@@ -830,13 +831,18 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
   }
 
   Widget _buildFinancialHeader() {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month - 11, 1);
+    final end = DateTime(now.year, now.month, 1);
+    final rangeText = '${DateFormat('MMM yyyy').format(start)} - ${DateFormat('MMM yyyy').format(end)}';
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text(
+          children: [
+            const Text(
               'Jumlah Transaksi Bulanan',
               style: TextStyle(
                 fontSize: 18,
@@ -844,10 +850,10 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
                 color: Colors.black,
               ),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
-              'Januari - Desember 2024',
-              style: TextStyle(
+              rangeText,
+              style: const TextStyle(
                 fontSize: 14,
                 color: Color(0xFF6B7280),
               ),
@@ -880,96 +886,145 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
   }
 
   Widget _buildTransactionChart() {
-    final data = _controller.monthlyTransactions;
-    final maxTransactions = _controller.maxTransactions;
+    final ownerId = _getCurrentOwnerId();
 
-    return Container(
-      height: 250,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Column(
-        children: [
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: data.map((data) {
-                final double heightRatio = (data['transactions'] as num) / maxTransactions;
-                return Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          '${data['transactions']}',
-                          style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF6B7280),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        height: (120 * heightRatio).clamp(8.0, 120.0),
-                        decoration: BoxDecoration(
-                          color: data['color'] as Color,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              (data['color'] as Color).withOpacity(0.9),
-                              (data['color'] as Color).withOpacity(0.7),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        data['month'],
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFF6B7280),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
+    return FutureBuilder<List<dynamic>>(
+      future: Future.wait([_controller.fetchFinancialMonthlyTotals(ownerId), _controller.fetchTotalCustomers(ownerId)]),
+      builder: (context, snap) {
+        if (snap.hasError) return Center(child: Text('Gagal memuat data: ${snap.error}'));
+        if (!snap.hasData) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
+
+        final data = (snap.data![0] ?? []) as List<Map<String, dynamic>>;
+        final uniqueCustomers = (snap.data![1] ?? 0) as int;
+        final maxTransactions = data.map((d) => (d['transactions'] as int)).fold<int>(1, (a, b) => b > a ? b : a);
+
+        return Container(
+          height: 250,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
           ),
-          const SizedBox(height: 12),
-          Divider(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
-          const SizedBox(height: 8),
-          _buildChartSummary(),
-        ],
-      ),
+          child: Column(
+            children: [
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: data.map((item) {
+                    final double heightRatio = (item['transactions'] as int) / (maxTransactions == 0 ? 1 : maxTransactions);
+                    return Expanded(
+                      child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              fit: FlexFit.loose,
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 4),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    '${item['transactions']}',
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            height: (120 * heightRatio).clamp(8.0, 120.0),
+                            decoration: BoxDecoration(
+                              color: item['color'] as Color,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  (item['color'] as Color).withOpacity(0.9),
+                                  (item['color'] as Color).withOpacity(0.7),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item['month'],
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFF6B7280),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Divider(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
+              const SizedBox(height: 8),
+              _buildChartSummary(data, uniqueCustomers),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildChartSummary() {
-    return Row(
+  Widget _buildChartSummary([List<Map<String, dynamic>>? data, int uniqueCustomers = 0]) {
+    int total = 0;
+    if (data != null) {
+      total = data.map((d) => d['transactions'] as int).fold<int>(0, (a, b) => a + b);
+    } else {
+      total = _controller.totalTransactions;
+    }
+    final maxTx = uniqueCustomers > 0 ? uniqueCustomers : _controller.maxTransactions;
+
+    // compute omzet (sum of 'total') if data provided
+    double sumTotal = 0.0;
+    if (data != null) {
+      for (final d in data) {
+        final t = d['total'];
+        if (t is num) sumTotal += t.toDouble();
+        else if (t is String) sumTotal += double.tryParse(t.replaceAll(',', '')) ?? 0.0;
+      }
+    }
+
+    final currency = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp', decimalDigits: 0);
+    final omzetText = sumTotal > 0 ? currency.format(sumTotal) : '-';
+
+        return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          'Total: ${_controller.totalTransactions}',
-          style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Total Transaksi: $total',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Omzet: $omzetText',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+            ),
+          ],
         ),
-        Text(
-          'Max: ${_controller.maxTransactions}',
-          style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-        ),
+            Text(
+              'Total Customer: $maxTx',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+            ),
       ],
     );
   }
 
   // Dialog methods
+  // ignore: duplicate_ignore
   // ignore: unused_element
   Future<void> _showEditDialog(
     BuildContext context, {

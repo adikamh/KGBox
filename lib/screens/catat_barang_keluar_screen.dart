@@ -133,6 +133,7 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
         final kategori = p['kategori_product'] ?? p['kategori'] ?? 'Umum';
         final harga = int.tryParse(p['price']?.toString() ?? p['harga_product']?.toString() ?? p['harga']?.toString() ?? '0') ?? 0;
         final stok = int.tryParse(p['jumlah_produk']?.toString() ?? p['stok']?.toString() ?? '0') ?? 0;
+        final productOwner = p['ownerId'] ?? p['ownerid'] ?? '';
 
         return {
           'id': parsedId,
@@ -143,6 +144,8 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
           'kategori': kategori,
           'harga': harga,
           'stok': stok,
+          'ownerId': productOwner,
+          'ownerid': productOwner,
           'full': p,
         };
       }).toList();
@@ -382,11 +385,17 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
         final productId = product['id'] ?? '';
         final jumlah = product['jumlah'] ?? 1;
         final hargaSatuan = product['harga'] ?? 0;
+        final productName = product['name'] ?? product['nama'] ?? '';
         
         final barcodeList = (product['scanned_barcodes'] is List) ? List<String>.from(product['scanned_barcodes']) : <String>[];
         final barcodeCount = barcodeList.isNotEmpty ? barcodeList.length : (jumlah is int ? jumlah : int.tryParse(jumlah.toString()) ?? 0);
         final unitPrice = (hargaSatuan is int) ? hargaSatuan : int.tryParse(hargaSatuan.toString()) ?? 0;
         final totalHargaItem = barcodeCount * unitPrice;
+        
+        // Format current date time for tanggal_order_items
+        final now = DateTime.now();
+        final tanggalOrderItems = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
+            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
 
         final orderItemMap = {
           'ownerid': ownerId,
@@ -396,6 +405,8 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
           'list_barcode': json.encode(barcodeList),
           'harga': unitPrice.toString(),
           'total_harga': totalHargaItem.toString(),
+          'tanggal_order_items': tanggalOrderItems,
+          'nama_produk': productName,
         };
 
         // Print payload sent to gocloud for debugging
@@ -766,6 +777,13 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
             // Build a flattened list of barcode entries: one entry per barcode
             final List<Map<String, dynamic>> barcodeEntries = [];
             for (final p in _allProducts) {
+              // Filter by owner - skip if product has owner and it doesn't match
+              final productOwner = (p['ownerId'] ?? p['ownerid'] ?? '').toString().trim();
+              if (productOwner.isNotEmpty && productOwner != ownerId) {
+                debugPrint('Skipping product (owner mismatch): owner=$productOwner, current=$ownerId');
+                continue;
+              }
+              
               final idProd = (p['id'] ?? p['id_product'] ?? '').toString();
               final nama = p['nama']?.toString() ?? 'Tanpa Nama';
               final stok = p['stok'] is int ? p['stok'] as int : int.tryParse(p['stok']?.toString() ?? '0') ?? 0;
