@@ -10,6 +10,7 @@ import 'screens/expired_screen.dart';
 import 'screens/pengiriman_screen.dart';
 import 'screens/supplier_screen.dart';
 import 'screens/stok_produk_screen.dart';
+import 'pages/stok_owner_page.dart';
 import 'providers/auth_provider.dart';
 import 'services/firebase_options.dart';
 
@@ -46,6 +47,7 @@ class WarehouseApp extends StatelessWidget {
           '/bestseller': (ctx) => const BestSellerScreen(),
           '/expired': (ctx) => const ExpiredScreen(),
           '/pengiriman': (ctx) => const PengirimanScreen(),
+          '/stok': (ctx) => const StokOwnerPage(),
           '/supplier': (ctx) => const SupplierScreen(),
           '/stok_produk': (ctx) => const StokProdukScreen(),
         },

@@ -397,7 +397,13 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
         const SizedBox(height: 16),
         _buildMainMenuRow(),
         const SizedBox(height: 12),
-        _buildStoreButton(),
+        Row(
+          children: [
+            Expanded(child: _buildStoreButton()),
+            const SizedBox(width: 12),
+            Expanded(child: _buildStokButton()),
+          ],
+        ),
         const SizedBox(height: 24),
         _buildProductFlowChart(),
       ],
@@ -522,6 +528,43 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
     );
   }
 
+  Widget _buildStokButton() {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/stok'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color.fromARGB(255, 92, 10, 199),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color.fromARGB(255, 92, 10, 199).withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory_2_rounded, size: 28, color: Colors.white),
+            SizedBox(width: 12),
+            Text(
+              'Stok',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  
   Widget _buildProductFlowChart() {
     return Container(
       padding: const EdgeInsets.all(20),
