@@ -15,6 +15,12 @@ import '../services/restapi.dart';
 import '../services/config.dart';
 import 'package:kgbox/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
+// Platform-specific IO is handled by `ExportService` to support web builds.
+import 'dart:typed_data';
+import '../services/export_service.dart';
+import 'package:excel/excel.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
 
 class DashboardOwnerController {
   // Data management
@@ -971,6 +977,132 @@ class DashboardOwnerController {
   }
 
   // Fetch dynamic monthly totals for chart (in/out untuk 12 bulan)
+  // Helper: parse various scannedAt value formats into DateTime
+  DateTime? _parseScannedAtValue(dynamic val) {
+    if (val == null) return null;
+    try {
+      if (val is Timestamp) return val.toDate();
+      if (val is DateTime) return val;
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      if (val is double) return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+      if (val is String) {
+        // Normalize narrow/no-break spaces
+        final s = val.replaceAll('\u202F', ' ').trim();
+        // Try ISO first
+        final iso = DateTime.tryParse(s);
+        if (iso != null) return iso;
+
+        // Example format: "January 3, 2026 at 2:02:13 AM UTC+7"
+        // Split on ' at ' (case-insensitive) to separate date and time+tz
+        final parts = s.split(RegExp(r'\bat\b', caseSensitive: false));
+        String datePart = parts.isNotEmpty ? parts[0].trim() : '';
+        String timePart = parts.length > 1 ? parts[1].trim() : '';
+
+        // Extract UTC offset if present
+        final tzMatch = RegExp(r'UTC([+-]\d{1,2})').firstMatch(timePart);
+        int tzOffsetHours = 0;
+        if (tzMatch != null) {
+          tzOffsetHours = int.tryParse(tzMatch.group(1) ?? '0') ?? 0;
+          timePart = timePart.replaceAll(RegExp(r'UTC[+-]\d{1,2}'), '').trim();
+        }
+
+        // Try parsing with pattern 'MMMM d, y h:mm:ss a'
+        try {
+          final combined = '$datePart $timePart';
+          final df = DateFormat('MMMM d, y h:mm:ss a', 'en_US');
+          var parsed = df.parse(combined);
+          if (tzMatch != null) {
+            // parsed is considered local; adjust from the provided UTC offset to local
+            parsed = parsed.subtract(Duration(hours: tzOffsetHours)).toLocal();
+          }
+          return parsed;
+        } catch (_) {
+          // ignore and fallback
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Compute monthly incoming counts from `product_barcodes` using the
+  /// same owner filtering and parsing logic as `loadCounts` (Barang Masuk).
+  Future<List<double>> computeMonthlyIncomingFromBarcodes(String ownerId) async {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month - 11, 1);
+    final months = List.generate(12, (i) {
+      final dt = DateTime(now.year, now.month - (11 - i), 1);
+      return DateTime(dt.year, dt.month);
+    });
+
+    final inTotals = List<double>.filled(12, 0);
+
+    try {
+      // Try direct owner-based queries first
+      QuerySnapshot<Map<String, dynamic>>? pbSnap;
+      for (final ownerField in ['ownerid', 'ownerId', 'owner', 'owner_id']) {
+        try {
+          final q = _fs.collection('product_barcodes').where(ownerField, isEqualTo: ownerId);
+          pbSnap = await q.get();
+          if (pbSnap.docs.isNotEmpty) {
+            debugPrint('computeMonthlyIncomingFromBarcodes: ownerField=$ownerField matched ${pbSnap.docs.length} docs');
+            break;
+          }
+        } catch (_) {
+          pbSnap = null;
+        }
+      }
+
+      // If we have direct owner-based docs, process them
+      if (pbSnap != null && pbSnap.docs.isNotEmpty) {
+        for (final doc in pbSnap.docs) {
+          final data = doc.data();
+          DateTime? dt;
+          try { dt = _parseScannedAtValue(data['scannedAt']); } catch (_) { dt = null; }
+          if (dt == null || dt.isBefore(start)) continue;
+          final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
+          if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
+        }
+        return inTotals;
+      }
+
+      // Fallback: find products owned by ownerId and count barcodes by productId
+      Query<Map<String, dynamic>> prodQ = _fs.collection('products');
+      try { prodQ = prodQ.where('ownerId', isEqualTo: ownerId); } catch (_) {
+        try { prodQ = prodQ.where('ownerid', isEqualTo: ownerId); } catch (_) {}
+      }
+
+      final prodSnap = await prodQ.get();
+      final productIds = prodSnap.docs.map((d) {
+        final data = d.data();
+        return (data['id'] ?? data['product_id'] ?? d.id).toString();
+      }).where((s) => s.isNotEmpty).toSet().toList();
+
+      if (productIds.isEmpty) return inTotals;
+
+      const batchSize = 10;
+      for (var i = 0; i < productIds.length; i += batchSize) {
+        final batch = productIds.sublist(i, (i + batchSize) > productIds.length ? productIds.length : i + batchSize);
+        try {
+          final snap = await _fs.collection('product_barcodes').where('productId', whereIn: batch).get();
+          for (final d in snap.docs) {
+            final data = d.data();
+            DateTime? dt;
+            try { dt = _parseScannedAtValue(data['scannedAt']); } catch (_) { dt = null; }
+            if (dt == null || dt.isBefore(start)) continue;
+            final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
+            if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
+          }
+        } catch (e) {
+          debugPrint('computeMonthlyIncomingFromBarcodes batch error: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('computeMonthlyIncomingFromBarcodes error: $e');
+    }
+
+    return inTotals;
+  }
+
   Future<Map<String, List<double>>> fetchMonthlyTotals(String ownerId) async {
     final inTotals = List<double>.filled(12, 0);
     final outTotals = List<double>.filled(12, 0);
@@ -982,131 +1114,13 @@ class DashboardOwnerController {
       return DateTime(dt.year, dt.month);
     });
 
-    // 1. Product barcodes (incoming) - per owner
+    // 1. Product barcodes (incoming) - use shared helper that mirrors Barang Masuk logic
     try {
-      final startTs = Timestamp.fromDate(start);
-      QuerySnapshot<Map<String, dynamic>>? pbSnap;
-      
-      // Try with owner field variants
-      final ownerFields = ['ownerid', 'ownerId', 'owner', 'owner_id'];
-      Exception? lastError;
-      
-      for (final ownerField in ownerFields) {
-        try {
-          pbSnap = await _fs.collection('product_barcodes')
-            .where(ownerField, isEqualTo: ownerId)
-            .where('scannedAt', isGreaterThanOrEqualTo: startTs)
-            .get();
-          debugPrint('fetchMonthlyTotals: Successfully queried product_barcodes with ownerField=$ownerField');
-          break;
-        } catch (e) {
-          lastError = e as Exception;
-          debugPrint('fetchMonthlyTotals: Failed with ownerField=$ownerField: $e');
-          pbSnap = null;
-        }
-      }
-      
-      // If owner field filtering fails, try to get all and filter by productId
-      if (pbSnap == null || pbSnap!.docs.isEmpty) {
-        debugPrint('fetchMonthlyTotals: Falling back to productId-based filtering');
-        try {
-          // Get products for this owner
-          final prods = await _fs.collection('products')
-            .where('ownerid', isEqualTo: ownerId)
-            .get();
-          
-          if (prods.docs.isEmpty) {
-            // Try alternate field names for products
-            final alternateProducts = await _fs.collection('products')
-              .where('ownerId', isEqualTo: ownerId)
-              .get();
-            
-            final productIds = alternateProducts.docs
-              .map((d) => d['id'] ?? d['product_id'] ?? d.id)
-              .whereType<String>()
-              .toList();
-            
-            if (productIds.isNotEmpty && productIds.length <= 10) {
-              pbSnap = await _fs.collection('product_barcodes')
-                .where('productId', whereIn: productIds)
-                .get();
-            } else if (productIds.isNotEmpty) {
-              // For large lists, fetch all and filter in memory
-              final allBarcodes = await _fs.collection('product_barcodes').get();
-              final filteredDocs = allBarcodes.docs.where((d) => 
-                productIds.contains(d['productId']) || 
-                productIds.contains(d['product_id'])
-              ).toList();
-              
-              for (final doc in filteredDocs) {
-                final data = doc.data();
-                DateTime? dt;
-                if (data['scannedAt'] is Timestamp) dt = (data['scannedAt'] as Timestamp).toDate();
-                else if (data['scannedAt'] is String) {
-                  try { dt = DateTime.parse(data['scannedAt']); } catch (_) {}
-                }
-                if (dt == null || dt.isBefore(start)) continue;
-
-                final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
-                if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
-              }
-              pbSnap = null;
-            }
-          } else {
-            final productIds = prods.docs
-              .map((d) => d['id'] ?? d['product_id'] ?? d.id)
-              .whereType<String>()
-              .toList();
-            
-            if (productIds.isNotEmpty && productIds.length <= 10) {
-              pbSnap = await _fs.collection('product_barcodes')
-                .where('productId', whereIn: productIds)
-                .get();
-            } else if (productIds.isNotEmpty) {
-              // For large lists, fetch all and filter in memory
-              final allBarcodes = await _fs.collection('product_barcodes').get();
-              final filteredDocs = allBarcodes.docs.where((d) => 
-                productIds.contains(d['productId']) || 
-                productIds.contains(d['product_id'])
-              ).toList();
-              
-              for (final doc in filteredDocs) {
-                final data = doc.data();
-                DateTime? dt;
-                if (data['scannedAt'] is Timestamp) dt = (data['scannedAt'] as Timestamp).toDate();
-                else if (data['scannedAt'] is String) {
-                  try { dt = DateTime.parse(data['scannedAt']); } catch (_) {}
-                }
-                if (dt == null || dt.isBefore(start)) continue;
-
-                final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
-                if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
-              }
-              pbSnap = null;
-            }
-          }
-        } catch (e) {
-          debugPrint('fetchMonthlyTotals: productId-based fallback error: $e');
-        }
-      }
-
-      // ignore: unnecessary_null_comparison
-      if (pbSnap != null) {
-        for (final doc in pbSnap.docs) {
-          final data = doc.data();
-          DateTime? dt;
-          if (data['scannedAt'] is Timestamp) dt = (data['scannedAt'] as Timestamp).toDate();
-          else if (data['scannedAt'] is String) {
-            try { dt = DateTime.parse(data['scannedAt']); } catch (_) {}
-          }
-          if (dt == null || dt.isBefore(start)) continue;
-
-          final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
-          if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
-        }
-      }
+      final computed = await computeMonthlyIncomingFromBarcodes(ownerId);
+      for (var i = 0; i < inTotals.length; i++) inTotals[i] = computed[i];
+      debugPrint('fetchMonthlyTotals: computed inTotals via shared helper=$inTotals');
     } catch (e) {
-      debugPrint('fetchMonthlyTotals: product_barcodes error: $e');
+      debugPrint('fetchMonthlyTotals: product_barcodes error (helper): $e');
     }
 
     // 2. Order items (outgoing) via REST API
@@ -1294,6 +1308,658 @@ class DashboardOwnerController {
 
   void logout(BuildContext context) {
     handleLogout(context);
+  }
+
+  // ============ EXPORT METHODS ============
+  
+  /// Laporan keseluruhan produk tersedia
+  Future<Map<String, dynamic>> fetchAvailableProductsReport(String ownerId) async {
+    try {
+      final productsRes = await _api.selectAll(token, project, 'product', appid);
+      final products = _safeParseList(productsRes);
+
+      // Filter by owner
+      final ownerProducts = products.where((p) {
+        final owner = (p['ownerid'] ?? p['owner_id'] ?? p['ownerId'] ?? '').toString();
+        return owner == ownerId;
+      }).toList();
+
+      return {
+        'type': 'Laporan Keseluruhan Produk Tersedia',
+        'timestamp': DateTime.now(),
+        'data': ownerProducts,
+        'columns': ['ID', 'Nama Produk', 'Kategori', 'Harga', 'Stok', 'Satuan']
+      };
+    } catch (e) {
+      debugPrint('Error fetching available products report: $e');
+      return {'type': 'Error', 'data': [], 'error': e.toString()};
+    }
+  }
+
+  /// Laporan keseluruhan produk kadaluarsa
+  Future<Map<String, dynamic>> fetchExpiredProductsReport(String ownerId) async {
+    try {
+      // Use Firestore-based helper to get products and barcode counts relative to expiry
+      final items = await fetchProductsWithBarcodeCountsByExpiry(ownerId);
+
+      // Map to exportable rows
+      final data = items.map((it) {
+        final p = it['productData'] as Map<String, dynamic>? ?? {};
+        return {
+          'product_doc_id': it['product_doc_id'] ?? '',
+          'productIdentifier': it['productIdentifier'] ?? '',
+          'nama': p['name'] ?? p['nama'] ?? p['product_name'] ?? '',
+          'expiredRaw': it['expiredRaw'] ?? '',
+          'expiredDate': it['expiredDate'] ?? '',
+          'totalBarcodes': it['totalBarcodes'] ?? 0,
+          'barcodesBeforeOrOnExpiry': it['barcodesBeforeOrOnExpiry'] ?? 0,
+          'category': p['category'] ?? p['kategori'] ?? '',
+          'stock': p['stock'] ?? p['stok'] ?? p['jumlah'] ?? 0,
+        };
+      }).toList();
+
+      return {
+        'type': 'Laporan Keseluruhan Produk Kadaluarsa',
+        'timestamp': DateTime.now(),
+        'data': data,
+        'columns': ['Product Doc ID', 'Product Identifier', 'Nama', 'Tanggal Kadaluarsa', 'Total Barcodes', 'Barcodes Sebelum/Pada Kadaluarsa', 'Kategori', 'Stok']
+      };
+    } catch (e) {
+      debugPrint('Error fetching expired products report: $e');
+      return {'type': 'Error', 'data': [], 'error': e.toString()};
+    }
+  }
+
+  /// Fetch products for owner and join with `product_barcodes` to count barcodes
+  /// whose `scannedAt` is before or on the product's expiry date (if available).
+  Future<List<Map<String, dynamic>>> fetchProductsWithBarcodeCountsByExpiry(String ownerId) async {
+    final firestore = _fs;
+    final results = <Map<String, dynamic>>[];
+
+    // Build product query scoped to owner
+    Query<Map<String, dynamic>> prodQuery = firestore.collection('products');
+    try {
+      prodQuery = prodQuery.where('ownerid', isEqualTo: ownerId);
+    } catch (_) {
+      try {
+        prodQuery = prodQuery.where('ownerId', isEqualTo: ownerId);
+      } catch (_) {}
+    }
+
+    final prodSnap2 = await prodQuery.get();
+    debugPrint('fetchProductsWithBarcodeCountsByExpiry: scanned products docs=${prodSnap2.docs.length}');
+
+    final candidates2 = ['tanggal_expired', 'tanggal_expire', 'expiredDate', 'expired_at', 'expired_date', 'expired', 'expired_date_str'];
+
+    for (final d in prodSnap2.docs) {
+      final p = d.data();
+
+      // locate raw expiry string/value
+      dynamic rawExpiredVal;
+      for (final k in candidates2) {
+        if (p.containsKey(k) && p[k] != null && p[k].toString().isNotEmpty) {
+          rawExpiredVal = p[k];
+          break;
+        }
+      }
+
+      DateTime? expDate;
+      String expRawStr = '';
+      if (rawExpiredVal != null) {
+        expRawStr = rawExpiredVal.toString();
+        // If it's a Timestamp
+        if (rawExpiredVal is Timestamp) {
+          expDate = rawExpiredVal.toDate();
+        } else {
+          // Try direct parse
+          expDate = DateTime.tryParse(expRawStr);
+          if (expDate == null) {
+            // try common formats
+            try {
+              expDate = DateFormat('yyyy-MM-dd').parse(expRawStr);
+            } catch (_) {
+              try {
+                expDate = DateFormat('dd/MM/yyyy').parse(expRawStr);
+              } catch (_) {
+                try {
+                  expDate = DateFormat('MMMM d, y', 'en_US').parse(expRawStr);
+                } catch (_) {}
+              }
+            }
+          }
+        }
+      }
+
+      final productIdentifier = (p['productId'] ?? p['product_id'] ?? d.id).toString();
+      // Fetch barcodes for this product
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> barcodeDocs = [];
+      try {
+        final q = await firestore.collection('product_barcodes').where('productId', isEqualTo: productIdentifier).get();
+        barcodeDocs = q.docs;
+      } catch (_) {
+        try {
+          final q2 = await firestore.collection('product_barcodes').where('product_id', isEqualTo: productIdentifier).get();
+          barcodeDocs = q2.docs;
+        } catch (_) {
+          // fallback: try fetching all and filter in memory (heavy)
+          final all = await firestore.collection('product_barcodes').get();
+          barcodeDocs = all.docs.where((bd) {
+            final b = bd.data();
+            return (b['productId'] == productIdentifier) || (b['product_id'] == productIdentifier);
+          }).toList();
+        }
+      }
+
+      int totalBarcodes = barcodeDocs.length;
+      int barcodesBeforeOrOnExpiry = 0;
+
+      if (expDate != null && barcodeDocs.isNotEmpty) {
+        for (final bd in barcodeDocs) {
+          final bdata = bd.data();
+          DateTime? scanned;
+          try {
+            scanned = _parseScannedAtValue(bdata['scannedAt']);
+          } catch (_) {
+            scanned = null;
+          }
+          if (scanned != null) {
+            if (!scanned.isAfter(expDate)) barcodesBeforeOrOnExpiry++;
+          }
+        }
+      }
+
+      results.add({
+        'product_doc_id': d.id,
+        'productIdentifier': productIdentifier,
+        'productData': p,
+        'expiredRaw': expRawStr,
+        'expiredDate': expDate?.toIso8601String() ?? null,
+        'totalBarcodes': totalBarcodes,
+        'barcodesBeforeOrOnExpiry': barcodesBeforeOrOnExpiry,
+      });
+    }
+
+    return results;
+  }
+
+  /// Laporan order pengiriman
+  Future<Map<String, dynamic>> fetchDeliveryOrderReport(String ownerId) async {
+    try {
+      // 1) Fetch order_items for this owner via REST
+      dynamic oiRaw;
+      try {
+        oiRaw = await _api.selectWhere(token, project, 'order_items', appid, 'ownerid', ownerId);
+      } catch (e) {
+        debugPrint('fetchDeliveryOrderReport: selectWhere order_items error: $e');
+        oiRaw = '[]';
+      }
+
+      List<dynamic> orderItemsList = [];
+      try {
+        if (oiRaw is String) {
+          final parsed = jsonDecode(oiRaw);
+          if (parsed is List) orderItemsList = parsed;
+          else if (parsed is Map && parsed['data'] is List) orderItemsList = parsed['data'];
+        } else if (oiRaw is List) orderItemsList = oiRaw;
+        else if (oiRaw is Map && oiRaw['data'] is List) orderItemsList = oiRaw['data'];
+      } catch (e) {
+        debugPrint('fetchDeliveryOrderReport: parsing order_items failed: $e');
+        orderItemsList = [];
+      }
+
+      // Collect order_ids and customer_ids
+      final orderIds = <String>{};
+      final customerIds = <String>{};
+      for (final raw in orderItemsList) {
+        if (raw is! Map) continue;
+        final oid = raw['order_id'] ?? raw['orderId'] ?? raw['order_id_server'] ?? raw['order'];
+        if (oid != null) orderIds.add(oid.toString());
+        final cid = raw['customer_id'] ?? raw['customerId'] ?? raw['customer'];
+        if (cid != null) customerIds.add(cid.toString());
+      }
+
+      // 2) Fetch orders in batches via REST
+      final orderMap = <String, Map<String, dynamic>>{};
+      if (orderIds.isNotEmpty) {
+        final ids = orderIds.toList();
+        const batchSize = 50;
+        for (var i = 0; i < ids.length; i += batchSize) {
+          final batch = ids.sublist(i, (i + batchSize) > ids.length ? ids.length : i + batchSize);
+          try {
+            final resp = await _api.selectWhereIn(token, project, 'order', appid, 'order_id', batch.join(','));
+            if (resp != null) {
+              final raw = (resp is String) ? jsonDecode(resp) : resp;
+              List<dynamic> ordersList = [];
+              if (raw is List) ordersList = raw;
+              else if (raw is Map && raw['data'] is List) ordersList = raw['data'];
+              for (final o in ordersList) {
+                if (o is Map) {
+                  final key = o['order_id']?.toString() ?? o['id']?.toString() ?? '';
+                  if (key.isNotEmpty) orderMap[key] = Map<String, dynamic>.from(o);
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('fetchDeliveryOrderReport: fetch orders batch error: $e');
+          }
+        }
+      }
+
+      // 3) Fetch customers in batches via REST (collection name 'customer' expected)
+      final customerMap = <String, Map<String, dynamic>>{};
+      if (customerIds.isNotEmpty) {
+        final ids = customerIds.toList();
+        const batchSize = 50;
+        for (var i = 0; i < ids.length; i += batchSize) {
+          final batch = ids.sublist(i, (i + batchSize) > ids.length ? ids.length : i + batchSize);
+          try {
+            final resp = await _api.selectWhereIn(token, project, 'customer', appid, 'customer_id', batch.join(','));
+            if (resp != null) {
+              final raw = (resp is String) ? jsonDecode(resp) : resp;
+              List<dynamic> custList = [];
+              if (raw is List) custList = raw;
+              else if (raw is Map && raw['data'] is List) custList = raw['data'];
+              for (final c in custList) {
+                if (c is Map) {
+                  final key = c['customer_id']?.toString() ?? c['id']?.toString() ?? '';
+                  if (key.isNotEmpty) customerMap[key] = Map<String, dynamic>.from(c);
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('fetchDeliveryOrderReport: fetch customers batch error: $e');
+          }
+        }
+      }
+
+      // 4) Assemble report per order
+      final Map<String, List<Map<String, dynamic>>> itemsByOrder = {};
+      for (final raw in orderItemsList) {
+        if (raw is! Map) continue;
+        final oid = (raw['order_id'] ?? raw['orderId'] ?? raw['order'])?.toString() ?? '';
+        if (oid.isEmpty) continue;
+        final item = <String, dynamic>{
+          'id_produk': raw['product_id'] ?? raw['productId'] ?? raw['id_produk'] ?? raw['product'] ?? '',
+          'nama_barang': raw['product_name'] ?? raw['nama'] ?? raw['nama_barang'] ?? raw['productName'] ?? '',
+          'list_barcode': raw['list_barcode'] ?? raw['listBarcode'] ?? raw['barcodes'] ?? [],
+        };
+        itemsByOrder.putIfAbsent(oid, () => []).add(item);
+      }
+
+      final results = <Map<String, dynamic>>[];
+      final processedOrderIds = orderIds.isNotEmpty ? orderIds : itemsByOrder.keys.toSet();
+      for (final oid in processedOrderIds) {
+        final orderData = orderMap[oid] ?? {};
+        final custId = (orderData['customer_id'] ?? orderData['customerId'] ?? orderData['customer'])?.toString() ?? '';
+        final cust = customerMap[custId] ?? {};
+
+        final row = <String, dynamic>{
+          'order_id': oid,
+          'id_staff': orderData['id_staff'] ?? orderData['staff_id'] ?? orderData['user_id'] ?? '',
+          'customer_id': custId,
+          'nama_toko': cust['nama_toko'] ?? cust['store_name'] ?? cust['toko'] ?? cust['shop_name'] ?? '',
+          'nama_pemilik_toko': cust['nama_pemilik_toko'] ?? cust['owner_name'] ?? cust['pemilik'] ?? '',
+          'no_telepon_customer': cust['no_telepon'] ?? cust['phone'] ?? cust['telepon'] ?? cust['phone_number'] ?? '',
+          'alamat_toko': cust['alamat'] ?? cust['address'] ?? cust['alamat_toko'] ?? '',
+          'tanggal_order': orderData['tanggal_order'] ?? orderData['order_date'] ?? orderData['created_at'] ?? orderData['date'] ?? '',
+          'total_harga': orderData['total'] ?? orderData['total_price'] ?? orderData['grand_total'] ?? 0,
+          'items': itemsByOrder[oid] ?? [],
+        };
+
+        results.add(row);
+      }
+
+      return {
+        'type': 'Laporan Order Pengiriman',
+        'timestamp': DateTime.now(),
+        'data': results,
+        'columns': ['order_id','id_staff','customer_id','nama_toko','nama_pemilik_toko','no_telepon_customer','alamat_toko','tanggal_order','total_harga','items']
+      };
+    } catch (e) {
+      debugPrint('Error fetching delivery order report: $e');
+      return {'type': 'Error', 'data': [], 'error': e.toString()};
+    }
+  }
+
+  /// Laporan keseluruhan staff
+  Future<Map<String, dynamic>> fetchStaffReport(String ownerId) async {
+    try {
+      // Firebase Firestore staff collection
+      final staffSnap = await _fs.collection('staff').get();
+      final allStaff = staffSnap.docs.map((doc) {
+        return {...doc.data(), 'id': doc.id};
+      }).toList();
+
+      // Filter by owner
+      final ownerStaff = allStaff.where((s) {
+        final owner = (s['ownerid'] ?? s['owner_id'] ?? s['ownerId'] ?? '').toString();
+        return owner == ownerId;
+      }).toList();
+
+      return {
+        'type': 'Laporan Keseluruhan Staff',
+        'timestamp': DateTime.now(),
+        'data': ownerStaff,
+        'columns': ['Nama', 'Email', 'Posisi', 'Telepon', 'Tanggal Bergabung', 'Status']
+      };
+    } catch (e) {
+      debugPrint('Error fetching staff report: $e');
+      return {'type': 'Error', 'data': [], 'error': e.toString()};
+    }
+  }
+
+  /// Laporan keseluruhan suppliers
+  Future<Map<String, dynamic>> fetchSuppliersReport(String ownerId) async {
+    try {
+      final suppliersRes = await _api.selectAll(token, project, 'supplier', appid);
+      final suppliers = _safeParseList(suppliersRes);
+
+      // Filter by owner
+      final ownerSuppliers = suppliers.where((s) {
+        final owner = (s['ownerid'] ?? s['owner_id'] ?? s['ownerId'] ?? '').toString();
+        return owner == ownerId;
+      }).toList();
+
+      return {
+        'type': 'Laporan Keseluruhan Suppliers',
+        'timestamp': DateTime.now(),
+        'data': ownerSuppliers,
+        'columns': ['Nama Supplier', 'Alamat', 'Telepon', 'Email', 'Kontak Person', 'Kategori Barang']
+      };
+    } catch (e) {
+      debugPrint('Error fetching suppliers report: $e');
+      return {'type': 'Error', 'data': [], 'error': e.toString()};
+    }
+  }
+
+  /// Laporan transaksi
+  Future<Map<String, dynamic>> fetchTransactionsReport(String ownerId) async {
+    try {
+      final transRes = await _api.selectAll(token, project, 'order', appid);
+      final transactions = _safeParseList(transRes);
+
+      // Filter by owner
+      final ownerTransactions = transactions.where((t) {
+        final owner = (t['ownerid'] ?? t['owner_id'] ?? t['ownerId'] ?? '').toString();
+        return owner == ownerId;
+      }).toList();
+
+      return {
+        'type': 'Laporan Transaksi',
+        'timestamp': DateTime.now(),
+        'data': ownerTransactions,
+        'columns': ['No Transaksi', 'Tanggal', 'Customer', 'Total', 'Metode Pembayaran', 'Status']
+      };
+    } catch (e) {
+      debugPrint('Error fetching transactions report: $e');
+      return {'type': 'Error', 'data': [], 'error': e.toString()};
+    }
+  }
+
+  /// Laporan barang keluar
+  Future<Map<String, dynamic>> fetchOutgoingItemsReport(String ownerId) async {
+    try {
+      final itemsRes = await _api.selectAll(token, project, 'order_items', appid);
+      final items = _safeParseList(itemsRes);
+
+      // Filter by owner
+      final ownerItems = items.where((item) {
+        final owner = (item['ownerid'] ?? item['owner_id'] ?? item['ownerId'] ?? '').toString();
+        return owner == ownerId;
+      }).toList();
+
+      return {
+        'type': 'Laporan Barang Keluar',
+        'timestamp': DateTime.now(),
+        'data': ownerItems,
+        'columns': ['ID Produk', 'Nama Produk', 'Jumlah', 'Tanggal Keluar', 'Tujuan', 'Status']
+      };
+    } catch (e) {
+      debugPrint('Error fetching outgoing items report: $e');
+      return {'type': 'Error', 'data': [], 'error': e.toString()};
+    }
+  }
+
+  /// Laporan barang masuk
+  Future<Map<String, dynamic>> fetchIncomingItemsReport(String ownerId) async {
+    try {
+      // Ambil dari product_barcodes Firebase
+      final barcodeSnap = await _fs.collection('product_barcodes').get();
+      final allBarcodes = barcodeSnap.docs.map((doc) {
+        return {...doc.data(), 'id': doc.id};
+      }).toList();
+
+      // Filter by owner
+      final ownerBarcodes = allBarcodes.where((b) {
+        final owner = (b['ownerid'] ?? b['owner_id'] ?? b['ownerId'] ?? b['owner'] ?? '').toString();
+        return owner == ownerId;
+      }).toList();
+
+      return {
+        'type': 'Laporan Barang Masuk',
+        'timestamp': DateTime.now(),
+        'data': ownerBarcodes,
+        'columns': ['Barcode', 'ID Produk', 'Nama Produk', 'Jumlah', 'Tanggal Masuk', 'Supplier']
+      };
+    } catch (e) {
+      debugPrint('Error fetching incoming items report: $e');
+      return {'type': 'Error', 'data': [], 'error': e.toString()};
+    }
+  }
+
+  /// Export ke CSV
+  Future<String> exportToCSV(Map<String, dynamic> reportData) async {
+    try {
+      final List<List<dynamic>> csvData = [];
+      
+      // Add header
+      csvData.add(reportData['columns'] ?? []);
+      
+      // Add data rows
+      final data = reportData['data'] ?? [];
+      for (var item in data) {
+        if (item is Map) {
+          final columns = reportData['columns'] ?? [];
+          // Cast item to Map<String, dynamic> for proper typing
+          // ignore: unnecessary_cast
+          final itemMap = Map<String, dynamic>.from(item as Map);
+          final row = columns.map((col) => _mapColumnToValue(col, itemMap)).toList();
+          csvData.add(row);
+        }
+      }
+
+      // Convert to CSV string
+      final csvText = _convertToCsv(csvData);
+      final String fileName = 'laporan_${reportData['type']?.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.csv';
+      return await ExportService.saveText(fileName, csvText, mimeType: 'text/csv');
+    } catch (e) {
+      debugPrint('Error exporting to CSV: $e');
+      return '';
+    }
+  }
+
+  /// Export ke JSON
+  Future<String> exportToJSON(Map<String, dynamic> reportData) async {
+    try {
+      final jsonData = {
+        'type': reportData['type'],
+        'timestamp': reportData['timestamp'],
+        'totalRecords': (reportData['data'] as List).length,
+        'data': reportData['data']
+      };
+
+      final String json = jsonEncode(jsonData);
+      final String fileName = 'laporan_${reportData['type']?.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.json';
+      return await ExportService.saveText(fileName, json, mimeType: 'application/json');
+    } catch (e) {
+      debugPrint('Error exporting to JSON: $e');
+      return '';
+    }
+  }
+
+  /// Helper: Map column name ke value dari item
+  dynamic _mapColumnToValue(String columnName, Map<String, dynamic> item) {
+    // Map user-friendly column names ke actual field names
+    final Map<String, List<String>> columnMapping = {
+      'ID': ['id', '_id', 'product_id', 'id_product'],
+      'Nama Produk': ['nama_produk', 'name', 'product_name'],
+      'Kategori': ['category', 'kategori', 'tipe'],
+      'Harga': ['harga_product', 'harga', 'price', 'price_unit'],
+      'Stok': ['stok', 'qty', 'jumlah', 'stock', 'quantity'],
+      'Satuan': ['satuan', 'unit'],
+      'Tanggal Kadaluarsa': ['tanggal_kadaluarsa', 'exp_date', 'expiry_date'],
+      'No Order': ['id', 'order_id', 'order_no'],
+      'Tgl Order': ['tanggal_order', 'order_date', 'created_at'],
+      'Customer': ['customer', 'customer_id', 'customer_name'],
+      'Status': ['status', 'order_status'],
+      'Total': ['total', 'total_price', 'grand_total'],
+      'Alamat Pengiriman': ['alamat', 'address', 'shipping_address'],
+      'Email': ['email'],
+      'Posisi': ['position', 'posisi', 'role'],
+      'Telepon': ['phone', 'telepon', 'no_hp'],
+      'Tanggal Bergabung': ['join_date', 'created_at'],
+      'Kontak Person': ['contact_person', 'kontak'],
+      'Kategori Barang': ['kategori_barang', 'product_category'],
+      'Metode Pembayaran': ['payment_method', 'metode_pembayaran'],
+      'Jumlah': ['jumlah', 'qty', 'quantity'],
+      'Tanggal Keluar': ['tanggal_order_items', 'tanggal_out', 'out_date'],
+      'Tujuan': ['destination', 'tujuan'],
+      'Tanggal Masuk': ['scannedAt', 'created_at', 'in_date'],
+      'Supplier': ['supplier', 'supplier_name'],
+      'Barcode': ['barcode', 'code'],
+    };
+
+    final candidates = columnMapping[columnName] ?? [columnName.toLowerCase()];
+    
+    for (var candidate in candidates) {
+      if (item.containsKey(candidate)) {
+        return item[candidate];
+      }
+    }
+    
+    return '';
+  }
+
+  /// Helper: Convert list to CSV
+  String _convertToCsv(List<List<dynamic>> data) {
+    final StringBuffer sb = StringBuffer();
+    for (var i = 0; i < data.length; i++) {
+      final row = data[i];
+      for (var j = 0; j < row.length; j++) {
+        final cell = row[j]?.toString() ?? '';
+        // Escape quotes and wrap if contains comma
+        final escaped = cell.replaceAll('"', '""');
+        if (escaped.contains(',') || escaped.contains('\n') || escaped.contains('"')) {
+          sb.write('"$escaped"');
+        } else {
+          sb.write(escaped);
+        }
+        if (j < row.length - 1) sb.write(',');
+      }
+      if (i < data.length - 1) sb.write('\n');
+    }
+    return sb.toString();
+  }
+
+  /// Helper: Save file ke local storage
+  // File saving is handled by `ExportService` (uses conditional imports).
+
+  /// Export to PDF
+  Future<String> exportToPDF(Map<String, dynamic> reportData) async {
+    try {
+      final doc = pw.Document();
+
+      final columns = List<String>.from(reportData['columns'] ?? []);
+      final data = List<dynamic>.from(reportData['data'] ?? []);
+
+      final headers = columns.map((c) => c.toString()).toList();
+      final rows = <List<String>>[];
+      for (final item in data) {
+        if (item is Map) {
+          final row = columns.map((col) => '${_mapColumnToValue(col, Map<String, dynamic>.from(item))}').toList();
+          rows.add(row);
+        }
+      }
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context ctx) => pw.Table.fromTextArray(
+            context: ctx,
+            data: <List<String>>[headers, ...rows],
+          ),
+        ),
+      );
+
+      final bytes = await doc.save();
+      final fileName = 'laporan_${reportData['type']?.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      return await ExportService.saveBytes(fileName, bytes, mimeType: 'application/pdf');
+    } catch (e) {
+      debugPrint('Error exporting to PDF: $e');
+      return '';
+    }
+  }
+
+  /// Export to XLSX
+  Future<String> exportToXLSX(Map<String, dynamic> reportData) async {
+    try {
+      // Use excel package to build workbook
+      final ex = Excel.createExcel();
+      final sheet = ex[ex.getDefaultSheet() ?? 'Sheet1'];
+
+      final columns = List<String>.from(reportData['columns'] ?? []);
+      // header
+      sheet.appendRow(columns);
+
+      final data = List<dynamic>.from(reportData['data'] ?? []);
+      for (final item in data) {
+        if (item is Map) {
+          final row = columns.map((col) => _mapColumnToValue(col, Map<String, dynamic>.from(item)).toString()).toList();
+          sheet.appendRow(row);
+        }
+      }
+
+      final encoded = ex.encode();
+      if (encoded == null) return '';
+      final bytes = Uint8List.fromList(encoded);
+      final fileName = 'laporan_${reportData['type']?.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      return await ExportService.saveBytes(fileName, bytes, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    } catch (e) {
+      debugPrint('Error exporting to XLSX: $e');
+      return '';
+    }
+  }
+
+  /// Helper: Parse list safely dari response
+  List<dynamic> _safeParseList(dynamic raw) {
+    try {
+      if (raw == null) return [];
+      if (raw is String) {
+        if (raw.isEmpty || raw == '[]') return [];
+        final d = jsonDecode(raw);
+        if (d is Map && d.containsKey('data')) return d['data'] as List? ?? [];
+        if (d is List) return d;
+        return [];
+      }
+      if (raw is Map && raw.containsKey('data')) return raw['data'] as List? ?? [];
+      if (raw is List) return raw;
+      return [];
+    } catch (e) {
+      debugPrint('Error parsing list: $e');
+      return [];
+    }
+  }
+
+  /// Helper: Share file
+  Future<void> shareFile(String filePath) async {
+    try {
+      if (filePath.isNotEmpty) {
+        // For now, just show a snackbar with the file path
+        debugPrint('File ready to share: $filePath');
+      }
+    } catch (e) {
+      debugPrint('Error sharing file: $e');
+    }
   }
 }
 

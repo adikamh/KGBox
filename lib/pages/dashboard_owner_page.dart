@@ -1,12 +1,21 @@
 // ignore_for_file: unused_local_variable, unused_element
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:kgbox/pages/kelola_staff_page.dart';
+import 'package:kgbox/screens/export_report_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:kgbox/providers/auth_provider.dart';
+import 'package:kgbox/screens/dashboard_owner_screen.dart';
+// ignore: unused_import, undefined_shown_name
+import 'package:kgbox/screens/dashboard_owner_screen.dart' as _controller show shareFile;
+// ignore: duplicate_import
+import 'package:kgbox/screens/export_report_screen.dart';
 import 'package:provider/provider.dart';
 import '../screens/dashboard_owner_screen.dart';
+// ignore: unused_import, undefined_shown_name
+import '../screens/dashboard_owner_screen.dart' as _controller show shareFile;
 
 class DashboardOwnerPage extends StatefulWidget {
   final String userRole;
@@ -35,6 +44,79 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
       await _controller.loadCounts(context);
       setState(() {});
     });
+  }
+
+  /// Debug helper: fetch sample `product_barcodes` docs for an owner and print key fields
+  Future<List<Map<String, dynamic>>> fetchProductBarcodeSamples(String ownerId, {int limit = 10}) async {
+    final firestore = FirebaseFirestore.instance;
+    final results = <Map<String, dynamic>>[];
+    try {
+      Query<Map<String, dynamic>> q = firestore.collection('product_barcodes').limit(limit);
+
+      // Try owner field variants
+      try {
+        q = firestore.collection('product_barcodes').where('ownerId', isEqualTo: ownerId).limit(limit);
+        var snap = await q.get();
+        if (snap.docs.isEmpty) {
+          q = firestore.collection('product_barcodes').where('ownerid', isEqualTo: ownerId).limit(limit);
+          snap = await q.get();
+        }
+        if (snap.docs.isEmpty) {
+          // try owner or owner_id
+          q = firestore.collection('product_barcodes').where('owner', isEqualTo: ownerId).limit(limit);
+          snap = await q.get();
+        }
+        if (snap.docs.isEmpty) {
+          q = firestore.collection('product_barcodes').where('owner_id', isEqualTo: ownerId).limit(limit);
+          snap = await q.get();
+        }
+        // If still empty, fall back to a limited fetch of all docs
+        if (snap.docs.isEmpty) {
+          snap = await firestore.collection('product_barcodes').limit(limit).get();
+        }
+
+        for (final d in snap.docs) {
+          final data = d.data();
+          final ownerField = (data['ownerId'] ?? data['ownerid'] ?? data['owner'] ?? data['owner_id'])?.toString() ?? '';
+          final scannedRaw = data['scannedAt'];
+          DateTime? scannedParsed;
+          try {
+            // try to use existing parser if available
+            // ignore: unnecessary_type_check
+            if (this is dynamic && (this as dynamic)._parseScannedAtValue != null) {
+              try {
+                scannedParsed = (this as dynamic)._parseScannedAtValue(scannedRaw) as DateTime?;
+              } catch (_) {
+                scannedParsed = null;
+              }
+            }
+          } catch (_) {}
+
+          final item = {
+            'docId': d.id,
+            'ownerField': ownerField,
+            'scannedRaw': scannedRaw,
+            'scannedParsed': scannedParsed?.toIso8601String(),
+            'rawData': data,
+          };
+          results.add(item);
+          debugPrint('fetchProductBarcodeSamples: $item');
+        }
+      } catch (e) {
+        debugPrint('fetchProductBarcodeSamples error: $e');
+        final snap = await firestore.collection('product_barcodes').limit(limit).get();
+        for (final d in snap.docs) {
+          final data = d.data();
+          final item = {'docId': d.id, 'rawData': data};
+          results.add(item);
+          debugPrint('fetchProductBarcodeSamples fallback: $item');
+        }
+      }
+    } catch (e) {
+      debugPrint('fetchProductBarcodeSamples final error: $e');
+    }
+
+    return results;
   }
 
   @override
@@ -96,47 +178,20 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
           itemBuilder: (context) => [
             PopupMenuItem<int>(
               value: 0,
-              child: Row(
-                children: [
-                  const Icon(Icons.badge, size: 20, color: Color(0xFF1E40AF)),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'Role: ${widget.userRole}',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            PopupMenuItem<int>(
-              value: 1,
-              child: Row(
-                children: [
-                  const Icon(Icons.settings, size: 20, color: Color(0xFF059669)),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'Settings',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.badge, size: 20, color: Color(0xFF1E40AF)),
+                title: const Text('Role: Owner', overflow: TextOverflow.ellipsis),
               ),
             ),
             PopupMenuItem<int>(
               value: 2,
-              child: Row(
-                children: [
-                  const Icon(Icons.logout, size: 20, color: Colors.red),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'Logout',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.logout, size: 20, color: Colors.red),
+                title: const Text('Logout', overflow: TextOverflow.ellipsis),
               ),
             ),
           ],
@@ -731,6 +786,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
         if (snap.hasData) {
           final inTotals = snap.data!['in']!;
           final outTotals = snap.data!['out']!;
+          debugPrint('_buildChartLegends: snap=${snap.data}, inTotals=$inTotals, outTotals=$outTotals');
           totalIn = inTotals.map((e) => e.toInt()).reduce((a, b) => a + b);
           totalOut = outTotals.map((e) => e.toInt()).reduce((a, b) => a + b);
         }
@@ -1143,6 +1199,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
               final ownerId = _getCurrentOwnerId();
               final remaining = stockSnap.data ?? 0;
               debugPrint('_buildDetailedChart: ownerId=$ownerId, stockSnap.state=${stockSnap.connectionState}, stockSnap.data=${stockSnap.data}');
+              debugPrint('_buildDetailedChart: inTotals=$inTotals, outTotals=$outTotals, snap=${snap.data}');
               final totalIn = inTotals.map((e) => e.toInt()).fold(0, (a, b) => a + b);
               final totalOut = outTotals.map((e) => e.toInt()).fold(0, (a, b) => a + b);
               final segments = [totalIn.toDouble(), totalOut.toDouble(), remaining.toDouble()];
@@ -1198,6 +1255,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
         if (snap.hasData) {
           final inTotals = snap.data!['in']!;
           final outTotals = snap.data!['out']!;
+          debugPrint('_buildSummaryCards: snap=${snap.data}, inTotals=$inTotals, outTotals=$outTotals');
           totalIn = inTotals.map((e) => e.toInt()).fold(0, (a, b) => a + b);
           totalOut = outTotals.map((e) => e.toInt()).fold(0, (a, b) => a + b);
         }
@@ -1324,13 +1382,278 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
 
   void _handleExport() {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Data sedang diekspor...'),
-        duration: Duration(seconds: 2),
+    _showExportReportDialog();
+  }
+
+  void _showExportReportDialog() {
+    final reports = [
+      {
+        'title': 'Laporan Keseluruhan Produk Tersedia',
+        'icon': Icons.inventory_2,
+        'action': 'available_products'
+      },
+      {
+        'title': 'Laporan Keseluruhan Produk Kadaluarsa',
+        'icon': Icons.warning_amber,
+        'action': 'expired_products'
+      },
+      {
+        'title': 'Laporan Order Pengiriman',
+        'icon': Icons.local_shipping,
+        'action': 'delivery_orders'
+      },
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.file_download, color: Color(0xFF059669)),
+            SizedBox(width: 8),
+            Text('Pilih Laporan'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: reports.length,
+            itemBuilder: (context, index) {
+              final report = reports[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ListTile(
+                  leading: Icon(
+                    report['icon'] as IconData,
+                    color: const Color(0xFF059669),
+                  ),
+                  title: Text(
+                    report['title'] as String,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showFormatSelectionDialog(report['action'] as String);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+        ],
       ),
     );
-    // TODO: Implement actual export functionality
+  }
+
+  void _showFormatSelectionDialog(String reportType) {
+    final formats = [
+      {'label': 'CSV (.csv)', 'value': 'csv', 'icon': Icons.description},
+      {'label': 'PDF (.pdf)', 'value': 'pdf', 'icon': Icons.picture_as_pdf},
+      {'label': 'Excel (.xlsx)', 'value': 'xlsx', 'icon': Icons.grid_on},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.file_present, color: Color(0xFF059669)),
+            SizedBox(width: 8),
+            Text('Pilih Format File'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: formats.length,
+            itemBuilder: (context, index) {
+              final format = formats[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ListTile(
+                  leading: Icon(
+                    format['icon'] as IconData,
+                    color: const Color(0xFF059669),
+                  ),
+                  title: Text(
+                    format['label'] as String,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _performExport(reportType, format['value'] as String);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performExport(String reportType, String format) async {
+    if (!mounted) return;
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: SizedBox(
+          height: 80,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Sedang mempersiapkan laporan...'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser;
+      final ownerId = user?.ownerId ?? user?.id ?? '';
+
+      if (ownerId.isEmpty) {
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error: Owner ID tidak ditemukan')),
+          );
+        }
+        return;
+      }
+
+      Map<String, dynamic> reportData = {};
+
+      // Fetch data berdasarkan report type
+      switch (reportType) {
+        case 'available_products':
+          if (mounted) {
+            Navigator.pop(context); // Close loading dialog
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => ExportReportScreen(initialFormat: format, ownerId: ownerId)),
+            );
+          }
+          return;
+        case 'expired_products':
+          if (mounted) {
+            Navigator.pop(context); // Close loading dialog
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => ExportReportScreen(initialFormat: format, ownerId: ownerId, reportType: 'expired_products')),
+            );
+          }
+          return;
+        case 'delivery_orders':
+          if (mounted) {
+            Navigator.pop(context); // Close loading dialog
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => ExportReportScreen(ownerId: ownerId, reportType: 'delivery_orders')),
+            );
+          }
+          return;
+        case 'staff':
+          reportData = await _controller.fetchStaffReport(ownerId);
+          break;
+        case 'suppliers':
+          reportData = await _controller.fetchSuppliersReport(ownerId);
+          break;
+        case 'transactions':
+          reportData = await _controller.fetchTransactionsReport(ownerId);
+          break;
+        case 'outgoing_items':
+          reportData = await _controller.fetchOutgoingItemsReport(ownerId);
+          break;
+        case 'incoming_items':
+          reportData = await _controller.fetchIncomingItemsReport(ownerId);
+          break;
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+      }
+
+      if (reportData.isEmpty || reportData['type'] == 'Error') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${reportData['error'] ?? 'Gagal mengambil data'}')),
+          );
+        }
+        return;
+      }
+
+      // Export based on format
+      String filePath = '';
+      switch (format) {
+        case 'csv':
+          filePath = await _controller.exportToCSV(reportData);
+          break;
+        case 'pdf':
+          filePath = await _controller.exportToPDF(reportData);
+          break;
+        case 'xlsx':
+          filePath = await _controller.exportToXLSX(reportData);
+          break;
+      }
+
+      if (mounted) {
+        if (filePath.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Laporan berhasil diexport: $filePath'),
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: 'Bagikan',
+                onPressed: () => _controller.shareFile(filePath),
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Gagal menyimpan file')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
   }
 }
 

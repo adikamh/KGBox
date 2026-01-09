@@ -39,6 +39,53 @@ class ChartOwnerScreen extends StatefulWidget {
 class _ChartOwnerScreenState extends State<ChartOwnerScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // Parse various scannedAt formats into DateTime (Timestamp, ISO, custom format)
+  DateTime? _parseScannedAtValue(dynamic val) {
+    if (val == null) return null;
+    try {
+      if (val is Timestamp) return val.toDate();
+      if (val is DateTime) return val;
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      if (val is double) return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+      if (val is String) {
+        final s = val.replaceAll('\u202F', ' ').trim();
+        // Try ISO first
+        final iso = DateTime.tryParse(s);
+        if (iso != null) return iso;
+
+        // Example: "January 3, 2026 at 2:02:13 AM UTC+7"
+        final parts = s.split(RegExp(r'\bat\b', caseSensitive: false));
+        final datePart = parts.isNotEmpty ? parts[0].trim() : '';
+        var timePart = parts.length > 1 ? parts[1].trim() : '';
+
+        // Extract UTC offset if exists
+        final tzMatch = RegExp(r'UTC([+-]\d{1,2})').firstMatch(timePart);
+        int tzOffset = 0;
+        if (tzMatch != null) {
+          tzOffset = int.tryParse(tzMatch.group(1) ?? '0') ?? 0;
+          timePart = timePart.replaceAll(RegExp(r'UTC[+-]\d{1,2}'), '').trim();
+        }
+
+        try {
+          final combined = '$datePart $timePart';
+          final df = DateFormat('MMMM d, y h:mm:ss a', 'en_US');
+          var parsed = df.parse(combined);
+          if (tzMatch != null) parsed = parsed.subtract(Duration(hours: tzOffset)).toLocal();
+          return parsed;
+        } catch (_) {
+          // fallback: try parsing without seconds
+          try {
+            final df2 = DateFormat('MMMM d, y h:mm a', 'en_US');
+            var parsed2 = df2.parse('$datePart $timePart');
+            if (tzMatch != null) parsed2 = parsed2.subtract(Duration(hours: tzOffset)).toLocal();
+            return parsed2;
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // ignore: unused_element
   List<String> _monthLabels() {
     final now = DateTime.now();
@@ -165,15 +212,18 @@ class _ChartOwnerScreenState extends State<ChartOwnerScreen> {
 
     for (final doc in pbSnap.docs) {
       final data = doc.data();
-      DateTime? dt;
-      if (data['scannedAt'] is Timestamp) dt = (data['scannedAt'] as Timestamp).toDate();
-      else if (data['scannedAt'] is String) {
-        try { dt = DateTime.parse(data['scannedAt']); } catch (_) {}
+
+      // If ownerId provided, filter by owner field variants
+      if (widget.ownerId != null && widget.ownerId!.isNotEmpty) {
+        final ownerFieldVal = data['ownerId'] ?? data['ownerid'] ?? data['owner'] ?? data['owner_id'];
+        if (ownerFieldVal == null || ownerFieldVal.toString() != widget.ownerId) continue;
       }
+
+      final dt = _parseScannedAtValue(data['scannedAt']);
       if (dt == null) continue;
       if (dt.isBefore(start)) continue;
 
-      final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
+      final idx = months.indexWhere((m) => m.year == dt.year && m.month == dt.month);
       if (idx < 0) continue;
 
       // each barcode scan equals one incoming unit
