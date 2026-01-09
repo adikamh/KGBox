@@ -7,6 +7,8 @@ class OrderItemsModel {
    final String list_barcode;
    final String harga;
    final String total_harga;
+   final String? tanggal_order_items;
+   final String? nama_produk;
 
    OrderItemsModel({
       required this.id,
@@ -16,7 +18,10 @@ class OrderItemsModel {
       required this.jumlah_produk,
       required this.list_barcode,
       required this.harga,
-      required this.total_harga
+      required this.total_harga,
+      required this.tanggal_order_items,
+      required this.nama_produk,
+
    });
 
    factory OrderItemsModel.fromJson(Map data) {
@@ -28,7 +33,9 @@ class OrderItemsModel {
          jumlah_produk: data['jumlah_produk'],
          list_barcode: data['list_barcode'],
          harga: data['harga'],
-         total_harga: data['total_harga']
+         total_harga: data['total_harga'],
+         tanggal_order_items: data['tanggal_order_items'],
+         nama_produk: data['nama_produk'],
       );
    }
 }

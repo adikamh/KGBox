@@ -39,6 +39,7 @@ class ChartOwnerScreen extends StatefulWidget {
 class _ChartOwnerScreenState extends State<ChartOwnerScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // ignore: unused_element
   List<String> _monthLabels() {
     final now = DateTime.now();
     return List.generate(12, (i) {

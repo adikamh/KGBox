@@ -1,4 +1,7 @@
+// ignore_for_file: unused_local_variable
+
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'package:kgbox/pages/kelola_staff_page.dart';
 import 'package:kgbox/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
@@ -69,6 +72,8 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
       ),
       title: Text(
         widget.userEmail,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
       ),
       centerTitle: false,
@@ -94,27 +99,42 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
                 children: [
                   const Icon(Icons.badge, size: 20, color: Color(0xFF1E40AF)),
                   const SizedBox(width: 8),
-                  Text('Role: ${widget.userRole}'),
+                  Flexible(
+                    child: Text(
+                      'Role: ${widget.userRole}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
             PopupMenuItem<int>(
               value: 1,
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.settings, size: 20, color: Color(0xFF059669)),
-                  SizedBox(width: 8),
-                  Text('Settings'),
+                  const Icon(Icons.settings, size: 20, color: Color(0xFF059669)),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Settings',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
             PopupMenuItem<int>(
               value: 2,
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.logout, size: 20, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Logout'),
+                  const Icon(Icons.logout, size: 20, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Logout',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -586,7 +606,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
             children: [
               Expanded(
                 child: Text(
-                  'Diagram Produk Masuk/Keluar',
+                  'Alur Produk',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -620,59 +640,129 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
   }
 
   Widget _buildMiniProductFlowChart() {
-    final data = _controller.monthlyProductFlow;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: data.map((item) {
-        final double inRatio = (item['in'] as num) / 500.0;
-        final double outRatio = (item['out'] as num) / 500.0;
-        return Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                height: 60 * outRatio.clamp(0.05, 1.0),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withOpacity(0.9),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                ),
+    final ownerId = _getCurrentOwnerId();
+    debugPrint('_buildMiniProductFlowChart: calling fetchMonthlyTotals with ownerId=$ownerId');
+    return FutureBuilder<Map<String, List<double>>>(
+      future: _controller.fetchMonthlyTotals(ownerId),
+      builder: (context, snap) {
+        debugPrint('_buildMiniProductFlowChart: state=${snap.connectionState}, hasData=${snap.hasData}, hasError=${snap.hasError}');
+        if (snap.hasError) {
+          debugPrint('_buildMiniProductFlowChart error: ${snap.error}');
+        }
+        
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
+        }
+
+        if (!snap.hasData) {
+          return const Center(child: Text('Tidak ada data', style: TextStyle(fontSize: 12)));
+        }
+
+        final inTotals = snap.data!['in']!;
+        final outTotals = snap.data!['out']!;
+        final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        
+        debugPrint('_buildMiniProductFlowChart: inTotals=$inTotals, outTotals=$outTotals');
+        
+        final maxVal = [...inTotals, ...outTotals].fold<double>(1, (prev, e) => e > prev ? e : prev);
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(12, (i) {
+            final inVal = inTotals[i];
+            final outVal = outTotals[i];
+            final inHeight = maxVal <= 0 ? 0.0 : (inVal / maxVal) * 60;
+            final outHeight = maxVal <= 0 ? 0.0 : (outVal / maxVal) * 60;
+
+            return Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final maxBarHeight = constraints.maxHeight - 18; // ruang label bulan
+
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (outHeight > 0)
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          height: outHeight.clamp(0, maxBarHeight),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                          ),
+                        ),
+                      if (inHeight > 0)
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          height: inHeight.clamp(0, maxBarHeight),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981),
+                            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(2)),
+                          ),
+            ),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        height: 14,
+                        child: Text(
+                          months[i],
+                          style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                height: 60 * inRatio.clamp(0.05, 1.0),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withOpacity(0.9),
-                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                item['month'],
-                style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280)),
-              ),
-            ],
-          ),
+            );
+          }),
         );
-      }).toList(),
+      },
     );
   }
 
   Widget _buildChartLegends() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _buildChartLegendItem(
-          const Color(0xFF10B981),
-          'Masuk (${_controller.totalProductIn} unit)',
-        ),
-        const SizedBox(width: 16),
-        _buildChartLegendItem(
-          const Color(0xFFEF4444),
-          'Keluar (${_controller.totalProductOut} unit)',
-        ),
-      ],
+    return FutureBuilder<Map<String, List<double>>>(
+      future: _controller.fetchMonthlyTotals(_getCurrentOwnerId()),
+      builder: (context, snap) {
+        int totalIn = 0;
+        int totalOut = 0;
+        
+        if (snap.hasData) {
+          final inTotals = snap.data!['in']!;
+          final outTotals = snap.data!['out']!;
+          totalIn = inTotals.map((e) => e.toInt()).reduce((a, b) => a + b);
+          totalOut = outTotals.map((e) => e.toInt()).reduce((a, b) => a + b);
+        }
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildChartLegendItem(
+              const Color(0xFF10B981),
+              'Masuk ($totalIn unit)',
+            ),
+            const SizedBox(width: 16),
+            _buildChartLegendItem(
+              const Color(0xFFEF4444),
+              'Keluar ($totalOut unit)',
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  String _getCurrentOwnerId() {
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser;
+      final ownerId = user?.ownerId ?? user?.id ?? '';
+      debugPrint('_getCurrentOwnerId: ownerId=$ownerId, user=$user');
+      return ownerId;
+    } catch (e) {
+      debugPrint('_getCurrentOwnerId error: $e');
+      return '';
+    }
   }
 
   Widget _buildChartLegendItem(Color color, String text) {
@@ -810,7 +900,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
                 final double heightRatio = (data['transactions'] as num) / maxTransactions;
                 return Expanded(
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
                         margin: const EdgeInsets.only(bottom: 4),
@@ -932,11 +1022,9 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildDialogHeader(context),
+                _buildDialogHeader(context, title: 'Detail Alur Produk'),
                 const SizedBox(height: 16),
-                _buildDetailedChart(),
-                const SizedBox(height: 20),
-                _buildSummaryCards(),
+                  _buildDetailedChart(),
               ],
             ),
           ),
@@ -945,13 +1033,13 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
     );
   }
 
-  Widget _buildDialogHeader(BuildContext context) {
+  Widget _buildDialogHeader(BuildContext context, {String title = ''}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text(
-          'Diagram Produk Masuk/Keluar',
-          style: TextStyle(
+        Text(
+          title,
+          style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
             color: Colors.black,
@@ -966,135 +1054,155 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
   }
 
   Widget _buildDetailedChart() {
-    final data = _controller.monthlyProductFlow;
-    
-    return Container(
-      height: 300,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: data.map((item) {
-          final double inRatio = (item['in'] as num) / 500.0;
-          final double outRatio = (item['out'] as num) / 500.0;
-          return Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Container(
-                  margin: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    '${item['in']}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF10B981),
-                    ),
-                  ),
-                ),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  height: (150 * outRatio).clamp(8.0, 150.0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFFEF4444).withOpacity(0.9),
-                        const Color(0xFFEF4444).withOpacity(0.7),
-                      ],
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${item['out']}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+    return FutureBuilder<Map<String, List<double>>>(
+      future: _controller.fetchMonthlyTotals(_getCurrentOwnerId()),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snap.hasError) {
+          return Center(child: Text('Error: ${snap.error}'));
+        }
+
+        if (!snap.hasData) {
+          return const Center(child: Text('Tidak ada data'));
+        }
+
+        final inTotals = snap.data!['in']!;
+        final outTotals = snap.data!['out']!;
+        [...inTotals, ...outTotals].fold<double>(1, (prev, e) => e > prev ? e : prev);
+
+        // Replace detailed bar chart with a donut chart summary
+        return Container(
+          height: 300,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: FutureBuilder<int>(
+            future: _controller.countRemainingStock(_getCurrentOwnerId()),
+            builder: (context, stockSnap) {
+              final ownerId = _getCurrentOwnerId();
+              final remaining = stockSnap.data ?? 0;
+              debugPrint('_buildDetailedChart: ownerId=$ownerId, stockSnap.state=${stockSnap.connectionState}, stockSnap.data=${stockSnap.data}');
+              final totalIn = inTotals.map((e) => e.toInt()).fold(0, (a, b) => a + b);
+              final totalOut = outTotals.map((e) => e.toInt()).fold(0, (a, b) => a + b);
+              final segments = [totalIn.toDouble(), totalOut.toDouble(), remaining.toDouble()];
+              final colors = [const Color(0xFF10B981), const Color(0xFFEF4444), const Color(0xFF3B82F6)];
+
+              return Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 200,
+                    height: 200,
+                    child: CustomPaint(
+                      painter: _DonutPainter(segments, colors),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('$remaining', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            const Text('Sisa Stok', style: TextStyle(fontSize: 14, color: Color(0xFF6B7280))),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  height: (150 * inRatio).clamp(8.0, 150.0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981),
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(4)),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFF10B981).withOpacity(0.9),
-                        const Color(0xFF10B981).withOpacity(0.7),
-                      ],
-                    ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 6,
+                    children: [
+                      _buildChartLegendItem(const Color(0xFF10B981), 'Masuk ($totalIn)'),
+                      _buildChartLegendItem(const Color(0xFFEF4444), 'Keluar ($totalOut)'),
+                      _buildChartLegendItem(const Color(0xFF3B82F6), 'Sisa ($remaining)'),
+                    ],
                   ),
-                  child: Center(
-                    child: Text(
-                      '${item['in']}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  item['month'],
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
+                ],
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
   Widget _buildSummaryCards() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildProductSummaryCard(
-            'Total Masuk',
-            '${_controller.totalProductIn} unit',
-            Icons.arrow_downward_rounded,
-            const Color(0xFF10B981),
+    return FutureBuilder<Map<String, List<double>>>(
+      future: _controller.fetchMonthlyTotals(_getCurrentOwnerId()),
+      builder: (context, snap) {
+        int totalIn = 0;
+        int totalOut = 0;
+
+        if (snap.hasData) {
+          final inTotals = snap.data!['in']!;
+          final outTotals = snap.data!['out']!;
+          totalIn = inTotals.map((e) => e.toInt()).fold(0, (a, b) => a + b);
+          totalOut = outTotals.map((e) => e.toInt()).fold(0, (a, b) => a + b);
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(12),
           ),
-          _buildProductSummaryCard(
-            'Total Keluar',
-            '${_controller.totalProductOut} unit',
-            Icons.arrow_upward_rounded,
-            const Color(0xFFEF4444),
+          child: FutureBuilder<int>(
+            future: _controller.countRemainingStock(_getCurrentOwnerId()),
+            builder: (context, stockSnap) {
+              final ownerId = _getCurrentOwnerId();
+              final remaining = stockSnap.data ?? 0;
+              debugPrint('_buildSummaryCards: ownerId=$ownerId, stockSnap.state=${stockSnap.connectionState}, remaining=$remaining');
+              final total = (totalIn + totalOut + remaining) == 0
+                  ? 1
+                  : (totalIn + totalOut + remaining);
+
+              final segments = [totalIn.toDouble(), totalOut.toDouble(), remaining.toDouble()];
+              final colors = [const Color(0xFF10B981), const Color(0xFFEF4444), const Color(0xFF3B82F6)];
+
+              return Row(
+                children: [
+                  SizedBox(
+                    width: 140,
+                    height: 140,
+                    child: CustomPaint(
+                      painter: _DonutPainter(segments, colors),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('$remaining', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const Text('Sisa Stok', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildProductSummaryCard('Total Masuk', '$totalIn unit', Icons.arrow_downward_rounded, const Color(0xFF10B981)),
+                        const SizedBox(height: 8),
+                        _buildProductSummaryCard('Total Keluar', '$totalOut unit', Icons.arrow_upward_rounded, const Color(0xFFEF4444)),
+                        const SizedBox(height: 8),
+                        _buildProductSummaryCard('Sisa Stok', '$remaining unit', Icons.inventory_2_rounded, const Color(0xFF3B82F6)),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-          _buildProductSummaryCard(
-            'Sisa Stok',
-            '${_controller.remainingStock} unit',
-            Icons.inventory_2_rounded,
-            const Color(0xFF3B82F6),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1134,6 +1242,8 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
     );
   }
 
+
+
   Widget _buildExportButton() {
     return FloatingActionButton.extended(
       backgroundColor: const Color(0xFF059669),
@@ -1158,6 +1268,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
   }
 
   void _handleExport() {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Data sedang diekspor...'),
@@ -1165,5 +1276,43 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
       ),
     );
     // TODO: Implement actual export functionality
+  }
+}
+
+// Top-level donut painter
+class _DonutPainter extends CustomPainter {
+  final List<double> segments;
+  final List<Color> colors;
+
+  _DonutPainter(this.segments, this.colors);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final center = rect.center;
+    final radius = math.min(size.width, size.height) / 2.0;
+    final strokeWidth = radius * 0.35;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+
+    final total = segments.fold<double>(0, (p, e) => p + e);
+    double startAngle = -math.pi / 2;
+    for (var i = 0; i < segments.length; i++) {
+      final seg = segments[i];
+      final sweep = total <= 0 ? 0.0 : (seg / total) * 2 * math.pi;
+      paint.color = colors[i % colors.length];
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius - strokeWidth / 2), startAngle, sweep, false, paint);
+      startAngle += sweep;
+    }
+
+    final innerPaint = Paint()..color = Colors.white;
+    canvas.drawCircle(center, radius - strokeWidth - 2, innerPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DonutPainter oldDelegate) {
+    return oldDelegate.segments != segments || oldDelegate.colors != colors;
   }
 }
