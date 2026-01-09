@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../services/config.dart';
 import '../services/restapi.dart';
 import 'dart:convert';
-import 'dart:io' show File, Platform, Process;
+import '../services/export_service.dart';
 import 'package:share_plus/share_plus.dart';
+// ignore: unused_import
 import 'package:path_provider/path_provider.dart' as pp;
 
 class ExportReportPage extends StatefulWidget {
@@ -180,44 +181,16 @@ class _ExportReportPageState extends State<ExportReportPage> {
       final fileName = 'report_${DateTime.now().millisecondsSinceEpoch}.csv';
       String savedPath = '';
       if (kIsWeb) {
-        await Share.share(sb.toString(), subject: fileName);
-      } else if (Platform.isAndroid || Platform.isIOS) {
-        final tmp = await pp.getTemporaryDirectory();
-        final saved = '${tmp.path}${Platform.pathSeparator}$fileName';
-        final f = File(saved);
-        await f.create(recursive: true);
-        await f.writeAsString(sb.toString());
-        savedPath = saved;
-        try {
-          await Share.shareXFiles([XFile(saved)], text: 'Export report');
-        } catch (_) {
-          await Share.share(sb.toString(), subject: fileName);
-        }
+        await ExportService.saveText(fileName, sb.toString(), mimeType: 'text/csv');
       } else {
-        String dirPath = '.';
-        try {
-          if (Platform.isWindows) {
-            final user = Platform.environment['USERPROFILE'] ?? '.';
-            dirPath = '$user\\Downloads';
-          } else if (Platform.isMacOS || Platform.isLinux) {
-            final home = Platform.environment['HOME'] ?? '.';
-            dirPath = '$home/Downloads';
+        savedPath = await ExportService.saveText(fileName, sb.toString(), mimeType: 'text/csv');
+        if (savedPath.isNotEmpty) {
+          try {
+            await Share.shareXFiles([XFile(savedPath)], text: 'Export report');
+          } catch (_) {
+            await Share.share(sb.toString(), subject: fileName);
           }
-        } catch (e) {
-          dirPath = '.';
         }
-        final saved = '$dirPath${Platform.pathSeparator}$fileName';
-        final f = File(saved);
-        await f.create(recursive: true);
-        await f.writeAsString(sb.toString());
-        savedPath = saved;
-        // try to open location
-        try {
-          if (Platform.isWindows) {
-            Process.run('explorer', [savedPath]);
-          } else if (Platform.isMacOS) Process.run('open', [savedPath]);
-          else if (Platform.isLinux) Process.run('xdg-open', [savedPath]);
-        } catch (_) {}
       }
 
       if (mounted) {

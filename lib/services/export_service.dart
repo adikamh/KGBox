@@ -1,17 +1,22 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 
-/// Minimal export service stub to satisfy references.
+// Conditional import: web vs io implementation
+import 'export_impl_io.dart' if (dart.library.html) 'export_impl_web.dart' as _impl;
+
+/// Export helper used by controllers. Provides cross-platform saving/downloading
+/// of files. Use `saveText` for textual content (CSV) and `saveBytes` for
+/// binary formats (PDF/XLSX).
 class ExportService {
-  /// Exports a monthly report. This is a small stub used by the UI when the
-  /// full backend integration isn't present in the workspace.
-  static Future<void> exportMonthlyReport({required BuildContext context, bool onlyOutbound = false}) async {
-    // Show a quick feedback so the UI doesn't crash when calling this helper.
-    if (!mounted(context)) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Export not implemented in stub.')));
+  /// Save a text file (e.g. CSV) and return the saved path or web indicator.
+  static Future<String> saveText(String filename, String content, {String? mimeType}) async {
+    final bytes = Uint8List.fromList(utf8.encode(content));
+    return await _impl.saveFileBytes(bytes, filename, mimeType: mimeType ?? 'text/plain');
   }
 
-  static bool mounted(BuildContext context) {
-    // Basic check — in real code this would be `if (context.mounted)` in caller.
-    return true;
+  /// Save raw bytes (PDF/XLSX). Returns saved path or web indicator.
+  static Future<String> saveBytes(String filename, Uint8List bytes, {String? mimeType}) async {
+    return await _impl.saveFileBytes(bytes, filename, mimeType: mimeType ?? 'application/octet-stream');
   }
 }

@@ -146,25 +146,6 @@ class DashboardStaffScreen extends ChangeNotifier {
       notifyListeners();
       return;
         // compute productInToday for non-owner id path as well
-        try {
-          productInToday = 0;
-          final firestore = FirebaseFirestore.instance;
-          final q = await firestore.collection('product_in')
-            .where('tanggal', isGreaterThanOrEqualTo: '$todayKey 00:00:00')
-            .where('tanggal', isLessThanOrEqualTo: '$todayKey 23:59:59')
-            .get();
-          if (q.docs.isNotEmpty) {
-            for (final d in q.docs) {
-              final data = d.data();
-              final qty = int.tryParse((data['qty'] ?? data['jumlah'] ?? data['jumlah_produk'] ?? '0').toString()) ?? 0;
-              productInToday += qty;
-            }
-          }
-        } catch (_) {
-          productInToday = 0;
-        }
-        _lastFetchTime = DateTime.now();
-        notifyListeners();
     } catch (e) {
       debugPrint('fetchTodaysOut error: $e');
     }
