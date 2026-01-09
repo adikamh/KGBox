@@ -1,3 +1,5 @@
+// ignore_for_file: unused_local_variable
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -38,6 +40,7 @@ class _StokOwnerScreenState extends State<StokOwnerScreen> {
 		}
 	}
 
+	// ignore: unused_element
 	Future<void> _assignSupplier(String requestId) async {
 		showDialog(
 			context: context,
@@ -115,6 +118,7 @@ class _StokOwnerScreenState extends State<StokOwnerScreen> {
 		);
 	}
 
+	// ignore: unused_element
 	Future<void> _handleStatusChange(QueryDocumentSnapshot<Map<String, dynamic>> doc, String value) async {
 		final data = doc.data();
 		final supplierId = data['supplier_id'] ?? '';
@@ -214,6 +218,7 @@ class _StokOwnerScreenState extends State<StokOwnerScreen> {
 		super.dispose();
 	}
 
+	// ignore: unused_element
 	void _showDetailDialog(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
 		final data = doc.data();
 		final product = data['product_name'] ?? '-';

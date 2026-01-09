@@ -112,6 +112,24 @@ class DashboardOwnerController {
 
       debugPrint('loadCounts: start ownerId=$ownerId');
 
+      // DEBUG: fetch a few sample product_barcodes docs to inspect schema
+      try {
+        Query<Map<String, dynamic>> sampleQ = _fs.collection('product_barcodes');
+        if (ownerId.isNotEmpty) {
+          // try common owner field variants
+          try { sampleQ = sampleQ.where('ownerid', isEqualTo: ownerId); } catch (_) {}
+          try { sampleQ = sampleQ.where('ownerId', isEqualTo: ownerId); } catch (_) {}
+          try { sampleQ = sampleQ.where('owner', isEqualTo: ownerId); } catch (_) {}
+        }
+        final sampleSnap = await sampleQ.limit(5).get();
+        debugPrint('loadCounts: sample product_barcodes fetched=${sampleSnap.docs.length}');
+        for (final d in sampleSnap.docs) {
+          debugPrint('loadCounts: sample doc id=${d.id}, data=${d.data()}');
+        }
+      } catch (e) {
+        debugPrint('loadCounts: sample fetch error: $e');
+      }
+
       // reset counts to safe defaults
       totalProduk = 0;
       barangMasuk = 0;
@@ -147,45 +165,181 @@ class DashboardOwnerController {
         debugPrint('loadCounts: totalProduk error: $e');
       }
 
-      // 2. BARANG MASUK: tetap dari product_barcodes dalam 7 hari terakhir
+      // 2. BARANG MASUK: count incoming barcodes for owner's products in last 7 days
       final now = DateTime.now();
       final lastWeek = now.subtract(const Duration(days: 7));
+      final lastWeekTs = Timestamp.fromDate(lastWeek);
       int masukCount = 0;
-      try {
-        Query masukQuery = _fs.collection('product_barcodes');
-        if (ownerId.isNotEmpty) {
-          // Coba kedua variasi field name
-          try {
-            masukQuery = masukQuery.where('ownerId', isEqualTo: ownerId);
-          } catch (_) {
-            try {
-              masukQuery = masukQuery.where('ownerid', isEqualTo: ownerId);
-            } catch (_) {}
-          }
-        }
-        masukQuery = masukQuery.where('scannedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(lastWeek));
+
+      // If ownerId present, first try counting barcodes that have owner info directly
+      if (ownerId.isNotEmpty) {
         try {
-          final agg = masukQuery.count();
-          final aggSnap = await agg.get();
-          masukCount = aggSnap.count ?? 0;
-        } catch (_) {
-          final masukSnap = await masukQuery.get();
-          masukCount = masukSnap.docs.length;
-        }
-      } catch (_) {
-        // fallback: scan all and parse scannedAt fields
-        final all = await _fs.collection('product_barcodes').get();
-        for (final d in all.docs) {
-          final m = d.data();
-          final raw = m['scannedAt'] ?? m['scanned_at'] ?? m['scannedAtStr'] ?? '';
-          DateTime? dt;
-          if (raw is Timestamp) dt = raw.toDate();
-          else if (raw is String && raw.isNotEmpty) {
-            try { dt = DateTime.parse(raw); } catch (_) {}
+          for (final ownerField in ['ownerid', 'ownerId', 'owner', 'owner_id']) {
+            try {
+              Query<Map<String, dynamic>> q = _fs.collection('product_barcodes').where(ownerField, isEqualTo: ownerId).where('scannedAt', isGreaterThanOrEqualTo: lastWeekTs);
+              try {
+                final agg = q.count();
+                final snap = await agg.get();
+                final c = snap.count ?? 0;
+                debugPrint('loadCounts: barangMasuk ownerField=$ownerField count=$c (via count)');
+                if (c > 0) {
+                  masukCount = c;
+                  break;
+                }
+              } catch (_) {
+                final snap2 = await q.get();
+                final c2 = snap2.docs.length;
+                debugPrint('loadCounts: barangMasuk ownerField=$ownerField count=$c2 (via get)');
+                if (c2 > 0) {
+                  masukCount = c2;
+                  break;
+                }
+              }
+            } catch (_) {
+              // ignore and try next owner field
+            }
           }
-          if (dt != null && dt.isAfter(lastWeek) && dt.isBefore(now)) masukCount++;
+        } catch (_) {}
+
+        // if we found a direct owner-based count, skip product-based counting
+        if (masukCount > 0) {
+          barangMasuk = masukCount;
+          debugPrint('loadCounts: barangMasuk (direct owner field)=$barangMasuk');
+        } else {
+          // fallthrough to productId-based counting below
         }
       }
+
+      // If ownerId present, prefer counting barcodes for products owned by this owner
+      if (ownerId.isNotEmpty && masukCount == 0) {
+        try {
+          Query<Map<String, dynamic>> prodQ = _fs.collection('products');
+          try {
+            prodQ = prodQ.where('ownerId', isEqualTo: ownerId);
+          } catch (_) {
+            try {
+              prodQ = prodQ.where('ownerid', isEqualTo: ownerId);
+            } catch (_) {}
+          }
+
+          final prodSnap = await prodQ.get();
+          final productIds = prodSnap.docs.map((d) {
+            final data = d.data();
+            return (data['id'] ?? data['id_product'] ?? d.id).toString();
+          }).where((s) => s.isNotEmpty).toSet().toList();
+
+          debugPrint('loadCounts: productIds list: $productIds');
+
+          // DEBUG: fetch a few barcode docs for these productIds to inspect schema
+          try {
+            final sampleBatches = <List<String>>[];
+            const sampleBatchSize = 10;
+            for (var i = 0; i < productIds.length; i += sampleBatchSize) {
+              sampleBatches.add(productIds.sublist(i, (i + sampleBatchSize) > productIds.length ? productIds.length : i + sampleBatchSize));
+            }
+            for (final b in sampleBatches) {
+              try {
+                final sampleBarcodes = await _fs.collection('product_barcodes').where('productId', whereIn: b).limit(5).get();
+                debugPrint('loadCounts: sample barcodes for batch(${b.length}) fetched=${sampleBarcodes.docs.length}');
+                for (final sd in sampleBarcodes.docs) {
+                  debugPrint('loadCounts: sample barcode id=${sd.id}, data=${sd.data()}');
+                }
+              } catch (e) {
+                debugPrint('loadCounts: sample barcode fetch error for batch $b: $e');
+              }
+            }
+          } catch (e) {
+            debugPrint('loadCounts: sample barcode batches error: $e');
+          }
+
+            if (productIds.isNotEmpty) {
+              int total = 0;
+              const batchSize = 10; // whereIn limit
+              for (var i = 0; i < productIds.length; i += batchSize) {
+                final batch = productIds.sublist(i, (i + batchSize) > productIds.length ? productIds.length : i + batchSize);
+                try {
+                  // fetch all barcodes for this batch and parse date fields locally to be robust
+                  final snap = await _fs.collection('product_barcodes').where('productId', whereIn: batch).get();
+                  for (final d in snap.docs) {
+                    final m = d.data();
+                    // try multiple possible date keys and formats
+                    final dateKeys = ['scannedAt', 'scanned_at', 'scannedAtStr', 'createdAt', 'created_at', 'timestamp', 'tanggal', 'date'];
+                    DateTime? dt;
+                    for (final k in dateKeys) {
+                      if (m.containsKey(k) && m[k] != null) {
+                        final raw = m[k];
+                        if (raw is Timestamp) { dt = raw.toDate(); break; }
+                        if (raw is String && raw.isNotEmpty) { try { dt = DateTime.parse(raw); break; } catch (_) {} }
+                      }
+                    }
+                    // fallback: no date found on document — log for debugging
+                    if (dt == null) {
+                      debugPrint('loadCounts: barcode id=${d.id} has no date fields');
+                    }
+                    if (dt != null) {
+                      if (dt.isAfter(lastWeek) && dt.isBefore(now)) total++;
+                    }
+                  }
+                } catch (_) {
+                  // ignore batch errors
+                }
+              }
+              masukCount = total;
+            debugPrint('loadCounts: productIds (${productIds.length}) processed, weeklyCount=$masukCount');
+
+            // If weekly count is zero, try a no-date fallback to see if there are barcodes at all for these products
+            if (masukCount == 0) {
+              int totalNoDate = 0;
+              for (var i = 0; i < productIds.length; i += batchSize) {
+                final batch = productIds.sublist(i, (i + batchSize) > productIds.length ? productIds.length : i + batchSize);
+                try {
+                  final qNoDate = await _fs.collection('product_barcodes').where('productId', whereIn: batch).get();
+                  totalNoDate += qNoDate.docs.length;
+                } catch (_) {
+                  // ignore
+                }
+              }
+              if (totalNoDate > 0) {
+                debugPrint('loadCounts: weekly count is 0 but total barcodes for owner products = $totalNoDate (fallback no-date)');
+                // Use the no-date total as a fallback so the dashboard shows something informative
+                masukCount = totalNoDate;
+              }
+            }
+          } else {
+            // no owned products found -> 0
+            masukCount = 0;
+          }
+        } catch (_) {
+          masukCount = 0;
+        }
+      } else {
+        // ownerId not provided: count globally within last week
+        try {
+          Query<Map<String, dynamic>> q = _fs.collection('product_barcodes').where('scannedAt', isGreaterThanOrEqualTo: lastWeekTs);
+          try {
+            final agg = q.count();
+            final snap = await agg.get();
+            masukCount = snap.count ?? 0;
+          } catch (_) {
+            final snap2 = await q.get();
+            masukCount = snap2.docs.length;
+          }
+        } catch (_) {
+          // fallback: scan all and parse scannedAt fields
+          final all = await _fs.collection('product_barcodes').get();
+          for (final d in all.docs) {
+            final m = d.data();
+            final raw = m['scannedAt'] ?? m['scanned_at'] ?? m['scannedAtStr'] ?? '';
+            DateTime? dt;
+            if (raw is Timestamp) dt = raw.toDate();
+            else if (raw is String && raw.isNotEmpty) {
+              try { dt = DateTime.parse(raw); } catch (_) {}
+            }
+            if (dt != null && dt.isAfter(lastWeek) && dt.isBefore(now)) masukCount++;
+          }
+        }
+      }
+
       barangMasuk = masukCount;
       debugPrint('loadCounts: barangMasuk=$barangMasuk');
 
@@ -597,6 +751,309 @@ class DashboardOwnerController {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Notifikasi belum diimplementasikan')),
     );
+  }
+
+  // Count remaining stock from product_barcodes collection
+  Future<int> countRemainingStock(String ownerId) async {
+    try {
+      // prefer using the controller-level Firestore instance
+      final firestore = _fs;
+
+      // 1) Try querying by explicit owner field(s) on product_barcodes
+      for (final ownerField in ['ownerid', 'ownerId']) {
+        try {
+          final q = firestore.collection('product_barcodes').where(ownerField, isEqualTo: ownerId);
+          try {
+            final agg = q.count();
+            final snap = await agg.get();
+            final c = snap.count ?? 0;
+            debugPrint('countRemainingStock: ownerId=$ownerId, field=$ownerField, count=$c (via count())');
+            if (c > 0) return c;
+          } catch (_) {
+            final snap2 = await q.get();
+            final c2 = snap2.docs.length;
+            debugPrint('countRemainingStock: ownerId=$ownerId, field=$ownerField, count=$c2 (via get())');
+            if (c2 > 0) return c2;
+          }
+        } catch (_) {
+          // ignore errors and try next owner field
+        }
+      }
+
+      // 2) If owner field not present on barcodes, try: fetch products owned by owner and count barcodes by productId
+      try {
+        Query<Map<String, dynamic>> prodQ = firestore.collection('products');
+        try {
+          prodQ = prodQ.where('ownerId', isEqualTo: ownerId);
+        } catch (_) {
+          try {
+            prodQ = prodQ.where('ownerid', isEqualTo: ownerId);
+          } catch (_) {}
+        }
+
+        final prodSnap = await prodQ.get();
+        final productIds = prodSnap.docs.map((d) {
+          final data = d.data();
+          return (data['id'] ?? data['id_product'] ?? d.id).toString();
+        }).where((s) => s.isNotEmpty).toSet().toList();
+
+        if (productIds.isNotEmpty) {
+          int total = 0;
+          const batchSize = 10; // Firestore whereIn limit
+          for (var i = 0; i < productIds.length; i += batchSize) {
+            final batch = productIds.sublist(i, (i + batchSize) > productIds.length ? productIds.length : i + batchSize);
+            try {
+              final q = firestore.collection('product_barcodes').where('productId', whereIn: batch);
+              try {
+                final agg = q.count();
+                final snap = await agg.get();
+                total += snap.count ?? 0;
+              } catch (_) {
+                final snap2 = await q.get();
+                total += snap2.docs.length;
+              }
+            } catch (_) {
+              // ignore per-batch failures
+            }
+          }
+          debugPrint('countRemainingStock by productIds: ownerId=$ownerId, count=$total');
+          if (total > 0) return total;
+        }
+      } catch (_) {
+        // ignore product-based fallback errors
+      }
+
+      // 3) Final fallback: count all barcodes (no owner info)
+      try {
+        final aggAll = firestore.collection('product_barcodes').count();
+        final snapAll = await aggAll.get();
+        final allCount = snapAll.count ?? 0;
+        debugPrint('countRemainingStock fallback: totalBarcodes=$allCount');
+        return allCount;
+      } catch (_) {
+        final snapAll2 = await firestore.collection('product_barcodes').get();
+        debugPrint('countRemainingStock fallback(get): totalBarcodes=${snapAll2.docs.length}');
+        return snapAll2.docs.length;
+      }
+    } catch (e) {
+      debugPrint('countRemainingStock error: $e');
+      return 0;
+    }
+  }
+
+  // Fetch dynamic monthly totals for chart (in/out untuk 12 bulan)
+  Future<Map<String, List<double>>> fetchMonthlyTotals(String ownerId) async {
+    final inTotals = List<double>.filled(12, 0);
+    final outTotals = List<double>.filled(12, 0);
+    
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month - 11, 1);
+    final months = List.generate(12, (i) {
+      final dt = DateTime(now.year, now.month - (11 - i), 1);
+      return DateTime(dt.year, dt.month);
+    });
+
+    // 1. Product barcodes (incoming)
+    try {
+      final startTs = Timestamp.fromDate(start);
+      QuerySnapshot<Map<String, dynamic>> pbSnap;
+      try {
+        pbSnap = await _fs.collection('product_barcodes').where('scannedAt', isGreaterThanOrEqualTo: startTs).get();
+      } catch (_) {
+        pbSnap = await _fs.collection('product_barcodes').get();
+      }
+
+      for (final doc in pbSnap.docs) {
+        final data = doc.data();
+        DateTime? dt;
+        if (data['scannedAt'] is Timestamp) dt = (data['scannedAt'] as Timestamp).toDate();
+        else if (data['scannedAt'] is String) {
+          try { dt = DateTime.parse(data['scannedAt']); } catch (_) {}
+        }
+        if (dt == null || dt.isBefore(start)) continue;
+
+        final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
+        if (idx >= 0) inTotals[idx] = inTotals[idx] + 1.0;
+      }
+    } catch (e) {
+      debugPrint('fetchMonthlyTotals: product_barcodes error: $e');
+    }
+
+    // 2. Order items (outgoing) via REST API
+    try {
+      dynamic oiRaw;
+      try {
+        if (ownerId.isNotEmpty) {
+          final resp = await _api.selectWhere(token, project, 'order_items', appid, 'ownerid', ownerId);
+          oiRaw = resp;
+          debugPrint('fetchMonthlyTotals: selectWhere returned: $resp');
+        } else {
+          final resp = await _api.selectAll(token, project, 'order_items', appid);
+          oiRaw = resp;
+          debugPrint('fetchMonthlyTotals: selectAll returned: $resp');
+        }
+      } catch (e) {
+        debugPrint('fetchMonthlyTotals: selectWhere/selectAll error: $e');
+        oiRaw = '[]';
+      }
+
+      List<dynamic> orderItemsList = [];
+      try {
+        dynamic parsed;
+        if (oiRaw is String) {
+          try {
+            parsed = jsonDecode(oiRaw);
+          } catch (e) {
+            debugPrint('fetchMonthlyTotals: jsonDecode oiRaw failed: $e');
+            parsed = null;
+          }
+        } else {
+          parsed = oiRaw;
+        }
+
+        if (parsed is List) orderItemsList = parsed;
+        else if (parsed is Map && parsed['data'] is List) orderItemsList = parsed['data'] as List<dynamic>;
+        else orderItemsList = [];
+      } catch (e) {
+        debugPrint('fetchMonthlyTotals: parsing order items error: $e');
+        orderItemsList = [];
+      }
+
+      debugPrint('fetchMonthlyTotals: orderItemsList.length=${orderItemsList.length}');
+
+      // Collect order_ids
+      final orderIds = <String>{};
+      for (final item in orderItemsList) {
+        if (item is Map) {
+          final oid = item['order_id'] ?? item['orderId'];
+          if (oid != null) orderIds.add(oid.toString());
+        }
+      }
+      
+      debugPrint('fetchMonthlyTotals: collected ${orderIds.length} order IDs');
+
+      // Fetch orders via REST in batch
+      final orderDateMap = <String, DateTime>{};
+      if (orderIds.isNotEmpty) {
+        final ids = orderIds.toList();
+        const batchSize = 50;
+        for (var i = 0; i < ids.length; i += batchSize) {
+          final batch = ids.sublist(i, (i + batchSize) > ids.length ? ids.length : i + batchSize);
+          try {
+            final winValue = batch.join(',');
+            final resp = await _api.selectWhereIn(token, project, 'orders', appid, 'order_id', winValue);
+            debugPrint('fetchMonthlyTotals: orders selectWhereIn resp type=${resp.runtimeType}');
+            if (resp != null) {
+              try {
+                final raw = (resp is String) ? jsonDecode(resp) : resp;
+                List<dynamic> ordersList = [];
+                if (raw is List) ordersList = raw;
+                else if (raw is Map && raw.containsKey('data') && raw['data'] is List) ordersList = raw['data'];
+                debugPrint('fetchMonthlyTotals: ordersList.length=${ordersList.length}');
+                for (final od in ordersList) {
+                  if (od is Map) {
+                    DateTime? d;
+                    final v = od['tanggal_order'] ?? od['tanggal'] ?? od['order_date'] ?? od['date'];
+                    if (v is String) {
+                      try {
+                        d = DateTime.parse(v);
+                      } catch (_) {}
+                    }
+                    final key = od['order_id']?.toString() ?? od['id']?.toString() ?? '';
+                    if (d != null && key.isNotEmpty) {
+                      orderDateMap[key] = d;
+                      debugPrint('fetchMonthlyTotals: orderDateMap[$key] = $d');
+                    }
+                  }
+                }
+              } catch (e) {
+                debugPrint('fetchMonthlyTotals: error parsing orders resp: $e');
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      // Process order items
+      for (final raw in orderItemsList) {
+        if (raw is! Map) continue;
+        final data = raw as Map<String, dynamic>;
+
+        DateTime? dt;
+        
+        // Priority 1: tanggal_order_items (newly added to order_items collection)
+        final tanggalOrderItems = data['tanggal_order_items'];
+        if (tanggalOrderItems is String) {
+          try {
+            dt = DateTime.parse(tanggalOrderItems);
+            debugPrint('fetchMonthlyTotals: parsed tanggal_order_items=$tanggalOrderItems');
+          } catch (_) {}
+        }
+        
+        // Priority 2: lookup from orders collection (fallback)
+        if (dt == null) {
+          final oid = data['order_id'] ?? data['orderId'];
+          if (oid != null && orderDateMap.containsKey(oid.toString())) {
+            dt = orderDateMap[oid.toString()];
+            debugPrint('fetchMonthlyTotals: got date from orderDateMap for order_id=$oid');
+          }
+        }
+
+        // Priority 3: other date fields (legacy fallback)
+        if (dt == null) {
+          final dateKeys = ['created_at', 'timestamp', 'order_date', 'date', 'tanggal', 'scannedAt'];
+          for (final k in dateKeys) {
+            if (data.containsKey(k) && data[k] != null) {
+              final v = data[k];
+              if (v is String) { try { dt = DateTime.parse(v); break; } catch (_) {} }
+            }
+          }
+        }
+        if (dt == null || dt.isBefore(start)) {
+          debugPrint('fetchMonthlyTotals: skipping item (dt=$dt, start=$start), data keys: ${data.keys}');
+          continue;
+        }
+
+        final idx = months.indexWhere((m) => m.year == dt?.year && m.month == dt?.month);
+        if (idx < 0) continue;
+
+        // Quantity via list_barcode
+        num qty = 0;
+        if (data.containsKey('list_barcode') && data['list_barcode'] != null) {
+          final lb = data['list_barcode'];
+          if (lb is List) qty = lb.length;
+          else if (lb is String) {
+            final parsed = lb.trim();
+            if (parsed.startsWith('[') && parsed.endsWith(']')) {
+              try {
+                final inner = parsed.substring(1, parsed.length - 1);
+                final items = inner.split(',').map((s) => s.replaceAll(RegExp(r'''["']'''), '').trim()).where((s) => s.isNotEmpty).toList();
+                qty = items.length;
+              } catch (_) {}
+            }
+          }
+        }
+        if (qty == 0) {
+          final qtyKeys = ['jumlah_produk', 'quantity', 'qty', 'jumlah'];
+          for (final k in qtyKeys) {
+            if (data.containsKey(k) && data[k] != null) {
+              final v = data[k];
+              if (v is num) qty = v;
+              else if (v is String) qty = num.tryParse(v.replaceAll(',', '')) ?? 0;
+              break;
+            }
+          }
+        }
+        if (qty == 0) qty = 1;
+        debugPrint('fetchMonthlyTotals: adding qty=$qty to outTotals[$idx]');
+        outTotals[idx] = outTotals[idx] + qty.toDouble();
+      }
+      debugPrint('fetchMonthlyTotals: final outTotals=$outTotals');
+    } catch (e) {
+      debugPrint('fetchMonthlyTotals: order items error: $e');
+    }
+
+    return {'in': inTotals, 'out': outTotals};
   }
 
   void showSettings(BuildContext context) {
