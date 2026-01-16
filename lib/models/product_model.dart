@@ -14,6 +14,9 @@ class ProductModel {
   final String tanggal_expired;
   final String supplier_name;
   final String ownerid;
+  final String ukuranProduct;
+  final String varianProduct;
+  final String isiPerDus;
 
   ProductModel({
     required this.id,
@@ -29,6 +32,9 @@ class ProductModel {
     required this.barcode_list,
     required this.tanggal_expired,
     this.ownerid = '',
+    this.ukuranProduct = '',
+    this.varianProduct = '',
+    this.isiPerDus = '',
   });
 
   factory ProductModel.fromJson(Map data) {
@@ -70,6 +76,9 @@ class ProductModel {
       tanggal_expired: data['tanggal_expired'] ?? '',
       supplier_name: data['supplierName'] ?? data['supplier_name'] ?? data['supplier'] ?? '',
       ownerid: data['ownerid'] ?? '',
+      ukuranProduct: data['ukuranProduct'] ?? '',
+      varianProduct: data['varianProduct'] ?? '',
+      isiPerDus: data['isiPerDus'] ?? '',
     );
   }
 
@@ -88,6 +97,9 @@ class ProductModel {
       'barcode_list': barcode_list,
       'tanggal_expired': tanggal_expired,
       'ownerid': ownerid,
+      'ukuranProduct': ukuranProduct,
+      'varianProduct': varianProduct,
+      'isiPerDus': isiPerDus,
     };
   }
 }
