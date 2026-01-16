@@ -14,6 +14,9 @@ class AddProductScreen {
   String selectedCategory = 'Makanan';
   List<String> categories = ['Makanan', 'Minuman'];
   String? ownerId;
+  String ukuranProduct = '';
+  String varianProduct = '';
+  String isiPerDus = '';
   
   // Controllers (will be passed from UI)
   TextEditingController? nameController;
@@ -33,6 +36,9 @@ class AddProductScreen {
     TextEditingController? hargaCtrl,
     TextEditingController? tanggalExpiredCtrl,
     TextEditingController? productionDateCtrl,
+    String? ukuran,
+    String? varian,
+    String? isiDus,
   }) {
     nameController = nameCtrl ?? TextEditingController();
     codeController = codeCtrl ?? TextEditingController();
@@ -50,6 +56,10 @@ class AddProductScreen {
     } else {
       codeController!.text = productCode;
     }
+
+    ukuranProduct = ukuran ?? '';
+    varianProduct = varian ?? '';
+    isiPerDus = isiDus ?? '';
   }
 
   // Save scanned barcodes into temporary collection
@@ -159,6 +169,9 @@ class AddProductScreen {
       'supplierName': supplierName ?? '',
       'createdAt': FieldValue.serverTimestamp(),
       'ownerId': ownerId ?? '',
+      'ukuran': ukuranProduct,
+      'varian': varianProduct,
+      'isiPerDus': isiPerDus,
       // productKey groups by name, brand, category and productionDate — different production dates create new master
       'productKey': '${nameController!.text.trim().toLowerCase()}_${merekController!.text.trim().toLowerCase()}_${selectedCategory.toLowerCase()}_$productionDate',
     };
@@ -228,6 +241,9 @@ class AddProductScreen {
           'supplierName': supplierName ?? '',
           'createdAt': FieldValue.serverTimestamp(),
           'ownerId': ownerId ?? '',
+          'ukuran': ukuranProduct,
+          'varian': varianProduct,
+          'isiPerDus': isiPerDus,
           'productKey': productKey,
         };
         await _firestore.collection('products').doc(masterId).set(productDoc);
@@ -325,11 +341,23 @@ class AddProductScreen {
   
   // Dispose controllers
   void dispose() {
-    nameController?.dispose();
-    codeController?.dispose();
-    merekController?.dispose();
-    hargaController?.dispose();
-    tanggalExpiredController?.dispose();
-    productionDateController?.dispose();
+    if (nameController != null) {
+      nameController!.dispose();
+    }
+    if (codeController != null) {
+      codeController!.dispose();
+    }
+    if (merekController != null) {
+      merekController!.dispose();
+    }
+    if (hargaController != null) {
+      hargaController!.dispose();
+    }
+    if (tanggalExpiredController != null) {
+      tanggalExpiredController!.dispose();
+    }
+    if (productionDateController != null) {
+      productionDateController!.dispose();
+    }
   }
 }
