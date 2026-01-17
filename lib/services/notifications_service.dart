@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
@@ -9,7 +8,8 @@ class NotificationService {
   NotificationService._internal();
   static final NotificationService instance = NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _local =
+      FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   bool _dailyScheduled = false;
 
@@ -46,11 +46,24 @@ class NotificationService {
     await _local.show(id, title, body, details);
   }
 
-  Future<void> scheduleDailyReminder(int id, String title, String body, int hour, int minute) async {
+  Future<void> scheduleDailyReminder(
+    int id,
+    String title,
+    String body,
+    int hour,
+    int minute,
+  ) async {
     await init();
     // compute next instance in local timezone
     final now = tz.TZDateTime.now(tz.local);
-    var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    var scheduled = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
     if (scheduled.isBefore(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
@@ -61,11 +74,16 @@ class NotificationService {
       body,
       scheduled,
       const NotificationDetails(
-        android: AndroidNotificationDetails('kgbox_channel', 'KGBox Notifications', channelDescription: 'Notifications for KGBox app'),
+        android: AndroidNotificationDetails(
+          'kgbox_channel',
+          'KGBox Notifications',
+          channelDescription: 'Notifications for KGBox app',
+        ),
         iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
     );
   }
@@ -73,7 +91,13 @@ class NotificationService {
   Future<void> ensureDailyScheduled(int hour, int minute) async {
     if (_dailyScheduled) return;
     try {
-      await scheduleDailyReminder(2000, 'Pengingat Produk', 'Periksa produk yang hampir kedaluwarsa.', hour, minute);
+      await scheduleDailyReminder(
+        2000,
+        'Pengingat Produk',
+        'Periksa produk yang hampir kedaluwarsa.',
+        hour,
+        minute,
+      );
       _dailyScheduled = true;
     } catch (_) {}
   }

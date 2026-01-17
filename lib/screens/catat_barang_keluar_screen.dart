@@ -819,11 +819,20 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
 
             // preserve selected barcodes across rebuilds of the inner StatefulBuilder
             final Map<String, bool> selectedBarcodes = {};
+            String searchQuery = '';
 
             return StatefulBuilder(
               builder: (context, setModalState) {
+                // Filter barcodes based on search query
+                final filteredBarcodes = barcodeEntries.where((e) {
+                  final barcode = e['barcode']?.toString().toLowerCase() ?? '';
+                  final nama = e['nama']?.toString().toLowerCase() ?? '';
+                  final query = searchQuery.toLowerCase();
+                  return barcode.contains(query) || nama.contains(query);
+                }).toList();
+
                 Widget buildBarcodeItem(int index) {
-                  final e = barcodeEntries[index];
+                  final e = filteredBarcodes[index];
                   final barcode = e['barcode']?.toString() ?? '';
                   final nama = e['nama']?.toString() ?? 'Tanpa Nama';
                   final harga = e['harga'] ?? 0;
@@ -858,13 +867,48 @@ class _CatatBarangKeluarScreenState extends State<CatatBarangKeluarScreen> {
                       const SizedBox(height: 12),
                       const Text('Pilih Produk Manual', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
-                      Expanded(
-                        child: ListView.separated(
-                          controller: controller,
-                          itemCount: barcodeEntries.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) => buildBarcodeItem(index),
+                      // Search field
+                      TextField(
+                        onChanged: (value) => setModalState(() => searchQuery = value),
+                        decoration: InputDecoration(
+                          hintText: 'Cari produk atau barcode...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () => setModalState(() => searchQuery = ''),
+                                )
+                              : null,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Results count
+                      if (searchQuery.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: Text(
+                            'Ditemukan ${filteredBarcodes.length} produk',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          ),
+                        ),
+                      Expanded(
+                        child: filteredBarcodes.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'Tidak ada produk yang cocok',
+                                  style: TextStyle(color: Colors.grey[600]),
+                                ),
+                              )
+                            : ListView.separated(
+                                controller: controller,
+                                itemCount: filteredBarcodes.length,
+                                separatorBuilder: (_, __) => const Divider(height: 1),
+                                itemBuilder: (context, index) => buildBarcodeItem(index),
+                              ),
                       ),
                       const SizedBox(height: 8),
                       Row(

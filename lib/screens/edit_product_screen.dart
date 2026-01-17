@@ -42,6 +42,8 @@ class EditProductScreen {
     _controllers['merek_product'] = TextEditingController(text: product.merek_product);
     _controllers['tanggal_beli'] = TextEditingController(text: tanggalBeliText);
     _controllers['harga_product'] = TextEditingController(text: _formatPriceDisplay(product.harga_product));
+    
+
     // production date (if present in model) - format for display
     String prodText = product.production_date;
     if (prodText.isNotEmpty) {
@@ -64,6 +66,20 @@ class EditProductScreen {
 
     // supplier name editable
     _controllers['supplier_name'] = TextEditingController(text: product.supplier_name);
+
+    // New fields: isi_perdus, ukuran, varian
+    // Handle null values and provide empty string defaults
+    _controllers['isi_perdus'] = TextEditingController(
+      text: (product.isi_perdus != null && product.isi_perdus! > 0) 
+        ? product.isi_perdus.toString() 
+        : ''
+    );
+    _controllers['ukuran'] = TextEditingController(
+      text: product.ukuran != null ? product.ukuran! : ''
+    );
+    _controllers['varian'] = TextEditingController(
+      text: product.varian != null ? product.varian! : ''
+    );
 
     return _controllers;
   }
@@ -224,6 +240,9 @@ class EditProductScreen {
       jumlah_produk: product.jumlah_produk,
       barcode_list: product.barcode_list,
       tanggal_expired: controllers['tanggal_expired']!.text.trim(),
+      isi_perdus: int.tryParse(controllers['isi_perdus']?.text.trim() ?? ''),
+      ukuran: controllers['ukuran']?.text.trim(),
+      varian: controllers['varian']?.text.trim(),
     );
     // Prepare Firestore update payload for master product doc
     try {
@@ -328,6 +347,17 @@ class EditProductScreen {
           }
           updateData['productionDate'] = prodFormatted;
         }
+
+          // Add new fields: isi_perdus, ukuran, varian
+          if (controllers.containsKey('isi_perdus')) {
+            updateData['isiPerdus'] = int.tryParse(controllers['isi_perdus']!.text.trim()) ?? 0;
+          }
+          if (controllers.containsKey('ukuran')) {
+            updateData['ukuran'] = controllers['ukuran']!.text.trim();
+          }
+          if (controllers.containsKey('varian')) {
+            updateData['varian'] = controllers['varian']!.text.trim();
+          }
 
           // Recompute productKey so masters stay consistent when name/brand/category/productionDate change
           final String prodForKey = updateData.containsKey('productionDate')

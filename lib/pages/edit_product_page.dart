@@ -343,6 +343,39 @@ class _EditProductPageState extends State<EditProductPage> {
                 ),
               ),
             ),
+
+            // Isi Perdus (Waste/Loss)
+            const SizedBox(height: 16),
+            _buildTextField(
+              label: 'Isi Perdus (Waste/Loss)',
+              controller: _controllers['isi_perdus']!,
+              icon: Icons.warning_amber_rounded,
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value != null && value.isNotEmpty && int.tryParse(value) == null) {
+                  return 'Isi perdus harus berupa angka';
+                }
+                return null;
+              },
+            ),
+
+            // Ukuran (Size)
+            const SizedBox(height: 16),
+            _buildTextField(
+              label: 'Ukuran (Size)',
+              controller: _controllers['ukuran']!,
+              icon: Icons.straighten_rounded,
+              validator: (value) => null,
+            ),
+
+            // Varian (Variant)
+            const SizedBox(height: 16),
+            _buildTextField(
+              label: 'Varian (Variant)',
+              controller: _controllers['varian']!,
+              icon: Icons.palette_rounded,
+              validator: (value) => null,
+            ),
           ],
         ),
       ),

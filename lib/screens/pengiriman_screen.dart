@@ -354,7 +354,7 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
     }
   }
 
-  // Fungsi yang ditingkatkan untuk membuka Google Maps
+  // Fungsi yang ditingkatkan untuk membuka Google Maps - Android & iOS compatible
   Future<void> _openMap(Map<String, dynamic> customer) async {
     try {
       String? address = customer['alamat_toko'] ?? customer['alamat'] ?? customer['address'];
@@ -364,51 +364,90 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
       // Cek apakah ada koordinat
       if (latitude != null && latitude.isNotEmpty && longitude != null && longitude.isNotEmpty) {
         // Gunakan koordinat jika tersedia (lebih akurat)
-        final Uri uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude');
+        debugPrint('Membuka Maps dengan koordinat: $latitude,$longitude');
         
-        // Coba URL scheme untuk aplikasi Google Maps
-        final Uri appUri = Uri.parse('google.navigation:q=$latitude,$longitude&mode=d');
+        // Android: geo URI scheme
+        try {
+          final Uri geoUri = Uri.parse('geo:$latitude,$longitude?z=16');
+          if (await canLaunchUrl(geoUri)) {
+            await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+            debugPrint('✓ Berhasil membuka Maps Android dengan geo: scheme');
+            return;
+          }
+        } catch (e) {
+          debugPrint('Error dengan geo: $e');
+        }
         
-        if (await canLaunchUrl(appUri)) {
-          await launchUrl(appUri);
-          debugPrint('Membuka Google Maps dengan koordinat: $latitude,$longitude');
-          return;
-        } else if (await canLaunchUrl(uri)) {
-          await launchUrl(uri);
-          return;
+        // iOS: Google Maps app URI
+        try {
+          final Uri iosUri = Uri.parse('comgooglemaps://?q=$latitude,$longitude');
+          if (await canLaunchUrl(iosUri)) {
+            await launchUrl(iosUri, mode: LaunchMode.externalApplication);
+            debugPrint('✓ Berhasil membuka Google Maps iOS');
+            return;
+          }
+        } catch (e) {
+          debugPrint('Error dengan comgooglemaps: $e');
+        }
+        
+        // Web fallback
+        try {
+          final Uri webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude');
+          if (await canLaunchUrl(webUri)) {
+            await launchUrl(webUri, mode: LaunchMode.externalApplication);
+            debugPrint('✓ Berhasil membuka Google Maps browser');
+            return;
+          }
+        } catch (e) {
+          debugPrint('Error dengan web fallback: $e');
         }
       }
       
       // Fallback ke alamat jika tidak ada koordinat
       if (address != null && address.isNotEmpty) {
-        final Uri uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
+        debugPrint('Membuka Maps dengan alamat: $address');
+        final encodedAddress = Uri.encodeComponent(address);
         
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri);
-          debugPrint('Membuka Google Maps dengan alamat: $address');
-        } else {
-          // Fallback lain: coba dengan URL scheme yang berbeda
-          final Uri fallbackUri = Uri.parse('comgooglemaps://?q=${Uri.encodeComponent(address)}');
-          
-          if (await canLaunchUrl(fallbackUri)) {
-            await launchUrl(fallbackUri);
-          } else {
-            // Jika tidak ada aplikasi Google Maps, buka di browser
-            final Uri webUri = Uri.parse('https://maps.google.com/?q=${Uri.encodeComponent(address)}');
-            if (await canLaunchUrl(webUri)) {
-              await launchUrl(webUri);
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Tidak dapat membuka Google Maps'))
-              );
-            }
+        // Android: geo URI untuk search by address
+        try {
+          final Uri geoUri = Uri.parse('geo:0,0?q=$encodedAddress');
+          if (await canLaunchUrl(geoUri)) {
+            await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+            debugPrint('✓ Berhasil membuka Maps Android dengan alamat');
+            return;
           }
+        } catch (e) {
+          debugPrint('Error geo alamat: $e');
         }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Alamat tidak tersedia'))
-        );
+        
+        // iOS: Google Maps app
+        try {
+          final Uri iosUri = Uri.parse('comgooglemaps://?q=$encodedAddress');
+          if (await canLaunchUrl(iosUri)) {
+            await launchUrl(iosUri, mode: LaunchMode.externalApplication);
+            debugPrint('✓ Berhasil membuka Google Maps iOS dengan alamat');
+            return;
+          }
+        } catch (e) {
+          debugPrint('Error comgooglemaps alamat: $e');
+        }
+        
+        // Web fallback
+        try {
+          final Uri webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedAddress');
+          if (await canLaunchUrl(webUri)) {
+            await launchUrl(webUri, mode: LaunchMode.externalApplication);
+            debugPrint('✓ Berhasil membuka Google Maps browser dengan alamat');
+            return;
+          }
+        } catch (e) {
+          debugPrint('Error web fallback alamat: $e');
+        }
       }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Alamat atau koordinat tidak tersedia'))
+      );
     } catch (e) {
       debugPrint('Error opening map: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -426,26 +465,48 @@ class _PengirimanScreenState extends State<PengirimanScreen> {
         return;
       }
       
-      final Uri appUri = Uri.parse('comgooglemaps://?q=${Uri.encodeComponent(address)}');
-      final Uri webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
+      final encodedAddress = Uri.encodeComponent(address);
+      debugPrint('Membuka Maps dengan alamat: $address');
       
-      if (await canLaunchUrl(appUri)) {
-        await launchUrl(appUri);
-      } 
-      // Fallback ke browser
-      else if (await canLaunchUrl(webUri)) {
-        await launchUrl(webUri);
-      } 
-      else {
-        final Uri fallbackUri = Uri.parse('https://maps.google.com/?q=${Uri.encodeComponent(address)}');
-        if (await canLaunchUrl(fallbackUri)) {
-          await launchUrl(fallbackUri);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Tidak dapat membuka Google Maps'))
-          );
+      // Android: geo URI untuk search (RECOMMENDED)
+      try {
+        final Uri geoUri = Uri.parse('geo:0,0?q=$encodedAddress');
+        if (await canLaunchUrl(geoUri)) {
+          await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+          debugPrint('✓ Berhasil membuka Maps Android dengan geo scheme');
+          return;
         }
+      } catch (e) {
+        debugPrint('Error geo URI: $e');
       }
+      
+      // iOS: Google Maps app URI
+      try {
+        final Uri iosUri = Uri.parse('comgooglemaps://?q=$encodedAddress');
+        if (await canLaunchUrl(iosUri)) {
+          await launchUrl(iosUri, mode: LaunchMode.externalApplication);
+          debugPrint('✓ Berhasil membuka Google Maps iOS');
+          return;
+        }
+      } catch (e) {
+        debugPrint('Error iOS URI: $e');
+      }
+      
+      // Web fallback untuk semua platform
+      try {
+        final Uri webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedAddress');
+        if (await canLaunchUrl(webUri)) {
+          await launchUrl(webUri, mode: LaunchMode.externalApplication);
+          debugPrint('✓ Berhasil membuka Google Maps browser');
+          return;
+        }
+      } catch (e) {
+        debugPrint('Error web fallback: $e');
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak dapat membuka Google Maps'))
+      );
     } catch (e) {
       debugPrint('Error opening map from address: $e');
       ScaffoldMessenger.of(context).showSnackBar(

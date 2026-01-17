@@ -463,6 +463,29 @@ class _StokProdukScreenState extends State<StokProdukScreen> {
         'updated_at': DateTime.now().toIso8601String(),
       });
 
+      // Create notification for owner about this stock request
+      try {
+        final notificationDoc = {
+          'title': 'Permintaan Tambah Stok dari $namaAgen',
+          'body': 'Permintaan tambah stok untuk "$productName" telah dikirim oleh $namaAgen',
+          'type': 'stock_request',
+          'ownerid': ownerId,
+          'staffName': namaAgen,
+          'staffId': user?.id ?? '',
+          'productName': productName,
+          'permintaanId': docRef.id,
+          'status': 'Pending',
+          'catatan': result['note'] ?? '',
+          'timestamp': Timestamp.now(),
+          'isRead': false,
+        };
+        
+        await firestore.collection('notifications').add(notificationDoc);
+        debugPrint('Notification created for stock request: ${docRef.id}');
+      } catch (eNotif) {
+        debugPrint('Failed creating notification for stock request: $eNotif');
+      }
+
       // Refresh history
       await _loadStockHistory();
 

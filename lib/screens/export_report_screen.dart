@@ -34,6 +34,9 @@ class _ExportReportScreenState extends State<ExportReportScreen> {
   Future<void> _loadReport() async {
     setState(() => _loading = true);
     try {
+      // TEST: First fetch customer data to debug
+      await testFetchCustomers();
+      
       if (widget.reportType == 'expired_products') {
         _report = await fetchExpiredProductsReport(widget.ownerId);
       } else if (widget.reportType == 'delivery_orders') {
@@ -79,7 +82,7 @@ class _ExportReportScreenState extends State<ExportReportScreen> {
       // Columns for delivery orders report
       final headers = [
         'order_id',
-        'customer_id',
+        'customor_id',
         'nama_toko',
         'nama_pemilik_toko',
         'no_telepon_customer',
@@ -91,18 +94,27 @@ class _ExportReportScreenState extends State<ExportReportScreen> {
       rows.add(headers);
 
       for (final item in _report) {
-        // Format items as JSON string
-        final itemsJson = jsonEncode(item['items']);
+        // Format items as readable string (product names with quantity)
+        final itemsList = (item['items'] as List<dynamic>?) ?? [];
+        final itemsStr = itemsList.isEmpty
+            ? ''
+            : itemsList.map((i) {
+                if (i is! Map) return '';
+                final nama = i['nama_barang'] ?? i['product_name'] ?? '';
+                final qty = i['jumlah'] ?? 1;
+                return '$nama (x$qty)';
+              }).join('; ');
+        
         rows.add([
           item['order_id'] ?? '',
-          item['customer_id'] ?? '',
+          item['customor_id'] ?? '',
           item['nama_toko'] ?? '',
           item['nama_pemilik_toko'] ?? '',
           item['no_telepon_customer'] ?? '',
           item['alamat_toko'] ?? '',
           item['tanggal_order'] ?? '',
           item['total_harga'] ?? '',
-          itemsJson,
+          itemsStr,
         ]);
       }
     } else if (widget.reportType == 'expired_products') {
@@ -235,18 +247,27 @@ class _ExportReportScreenState extends State<ExportReportScreen> {
 
       final data = <List<String>>[];
       for (final item in _report) {
-        // Format items as JSON string for PDF
-        final itemsJson = jsonEncode(item['items']);
+        // Format items as readable string (product names with quantity)
+        final itemsList = (item['items'] as List<dynamic>?) ?? [];
+        final itemsStr = itemsList.isEmpty
+            ? ''
+            : itemsList.map((i) {
+                if (i is! Map) return '';
+                final nama = i['nama_barang'] ?? i['product_name'] ?? '';
+                final qty = i['jumlah'] ?? 1;
+                return '$nama (x$qty)';
+              }).join('; ');
+        
         data.add([
           item['order_id']?.toString() ?? '',
-          item['customer_id']?.toString() ?? '',
+          item['customor_id']?.toString() ?? '',
           item['nama_toko']?.toString() ?? '',
           item['nama_pemilik_toko']?.toString() ?? '',
           item['no_telepon_customer']?.toString() ?? '',
           item['alamat_toko']?.toString() ?? '',
           _formatDate(item['tanggal_order']),
           _formatPrice(item['total_harga']),
-          itemsJson,
+          itemsStr,
         ]);
       }
 
@@ -346,18 +367,27 @@ class _ExportReportScreenState extends State<ExportReportScreen> {
       sheet.appendRow(headers);
 
       for (final item in _report) {
-        // Format items as JSON string for Excel
-        final itemsJson = jsonEncode(item['items']);
+        // Format items as readable string (product names with quantity)
+        final itemsList = (item['items'] as List<dynamic>?) ?? [];
+        final itemsStr = itemsList.isEmpty
+            ? ''
+            : itemsList.map((i) {
+                if (i is! Map) return '';
+                final nama = i['nama_barang'] ?? i['product_name'] ?? '';
+                final qty = i['jumlah'] ?? 1;
+                return '$nama (x$qty)';
+              }).join('; ');
+        
         sheet.appendRow([
           item['order_id']?.toString() ?? '',
-          item['customer_id']?.toString() ?? '',
+          item['customor_id']?.toString() ?? '',
           item['nama_toko']?.toString() ?? '',
           item['nama_pemilik_toko']?.toString() ?? '',
           item['no_telepon_customer']?.toString() ?? '',
           item['alamat_toko']?.toString() ?? '',
           _formatDate(item['tanggal_order']),
           _formatPrice(item['total_harga']),
-          itemsJson,
+          itemsStr,
         ]);
       }
     } else {
@@ -654,7 +684,7 @@ class _ExportReportScreenState extends State<ExportReportScreen> {
                                           children: [
                                             SizedBox(height: 4),
                                             Text(
-                                              'Toko: ${item['nama_toko'] ?? item['customer_id'] ?? '-'}',
+                                              'Toko: ${item['nama_toko'] ?? item['customor_id'] ?? '-'}',
                                               style: TextStyle(fontSize: 12),
                                             ),
                                             Text(
@@ -882,7 +912,10 @@ Future<List<Map<String, dynamic>>> fetchExpiredProductsReport([String? ownerId])
 Future<List<Map<String, dynamic>>> fetchDeliveryOrderReport([String? ownerId]) async {
   final api = DataService();
   try {
-    // First, fetch order items with owner filter
+    debugPrint('=== fetchDeliveryOrderReport START ===');
+    debugPrint('ownerId: $ownerId');
+
+    // Fetch order_items for this owner
     dynamic oiRaw;
     List<dynamic> orderItemsList = [];
 
@@ -890,93 +923,143 @@ Future<List<Map<String, dynamic>>> fetchDeliveryOrderReport([String? ownerId]) a
     final ownerFields = ['ownerid', 'ownerId', 'owner', 'owner_id'];
     for (final field in ownerFields) {
       try {
+        debugPrint('Trying selectWhere(order_items, $field, $ownerId)...');
         oiRaw = await api.selectWhere(token, project, 'order_items', appid, field, ownerId ?? '');
+        debugPrint('Response type: ${oiRaw.runtimeType}, value: $oiRaw');
+        
         if (oiRaw != null) {
           // Parse the response
           if (oiRaw is String) {
             final parsed = jsonDecode(oiRaw);
+            debugPrint('Parsed as: ${parsed.runtimeType}');
             if (parsed is List && parsed.isNotEmpty) {
               orderItemsList = parsed;
+              debugPrint('✓ Got ${orderItemsList.length} order_items from list');
               break;
             } else if (parsed is Map && parsed['data'] is List && (parsed['data'] as List).isNotEmpty) {
               orderItemsList = parsed['data'];
+              debugPrint('✓ Got ${orderItemsList.length} order_items from Map.data');
               break;
             }
           } else if (oiRaw is List && oiRaw.isNotEmpty) {
             orderItemsList = oiRaw;
+            debugPrint('✓ Got ${orderItemsList.length} order_items directly as list');
             break;
           } else if (oiRaw is Map && oiRaw['data'] is List && (oiRaw['data'] as List).isNotEmpty) {
             orderItemsList = oiRaw['data'];
+            debugPrint('✓ Got ${orderItemsList.length} order_items from direct Map.data');
             break;
           }
         }
       } catch (e) {
-        debugPrint('fetchDeliveryOrderReport: selectWhere order_items with field $field error: $e');
+        debugPrint('✗ selectWhere order_items with field $field error: $e');
       }
     }
+
+    debugPrint('After selectWhere attempts: ${orderItemsList.length} order_items');
 
     // If still empty, try selectAll and filter locally
     if (orderItemsList.isEmpty) {
       try {
+        debugPrint('Trying selectAll(order_items)...');
         final allRaw = await api.selectAll(token, project, 'order_items', appid);
+        debugPrint('selectAll response type: ${allRaw.runtimeType}');
+        
         if (allRaw is String) {
           final parsed = jsonDecode(allRaw);
           if (parsed is List) orderItemsList = parsed;
           else if (parsed is Map && parsed['data'] is List) orderItemsList = parsed['data'];
         } else if (allRaw is List) orderItemsList = allRaw;
         else if (allRaw is Map && allRaw['data'] is List) orderItemsList = allRaw['data'];
+        
+        debugPrint('Got ${orderItemsList.length} total order_items');
       } catch (e) {
-        debugPrint('fetchDeliveryOrderReport: selectAll order_items error: $e');
+        debugPrint('✗ selectAll order_items error: $e');
       }
 
       // Filter by ownerId locally if needed
       if (orderItemsList.isNotEmpty && ownerId != null && ownerId.isNotEmpty) {
+        debugPrint('Filtering ${orderItemsList.length} order_items by ownerId=$ownerId');
         orderItemsList = orderItemsList.where((raw) {
           if (raw is! Map) return false;
           final o = raw as Map<String, dynamic>;
           final ownerVal = (o['ownerid'] ?? o['ownerId'] ?? o['owner'] ?? o['owner_id'])?.toString() ?? '';
           return ownerVal == ownerId;
         }).toList();
+        debugPrint('After filtering: ${orderItemsList.length} order_items');
       }
     }
 
-    // Extract order IDs and customer IDs
+    // Extract order IDs from order_items
     final orderIds = <String>{};
-    final customerIds = <String>{};
     for (final raw in orderItemsList) {
       if (raw is! Map) continue;
       final oid = raw['order_id'] ?? raw['orderId'] ?? raw['order'];
       if (oid != null) orderIds.add(oid.toString());
-      final cid = raw['customer_id'] ?? raw['customerId'] ?? raw['customer'];
-      if (cid != null) customerIds.add(cid.toString());
     }
 
-    // Fetch orders by IDs
+    debugPrint('Extracted ${orderIds.length} unique order_ids: $orderIds');
+
+    // Extract customer IDs and order data from order collection
     final orderMap = <String, Map<String, dynamic>>{};
+    final customerIds = <String>{};
+    
+    debugPrint('Extracting customor_id from ${orderIds.length} order_ids...');
+    
+    // Fetch orders to get customor_id
     if (orderIds.isNotEmpty) {
       final ids = orderIds.toList();
       const batchSize = 50;
+      
       for (var i = 0; i < ids.length; i += batchSize) {
         final batch = ids.sublist(i, (i + batchSize) > ids.length ? ids.length : i + batchSize);
         try {
+          debugPrint('Fetching orders batch: $batch');
           final resp = await api.selectWhereIn(token, project, 'order', appid, 'order_id', batch.join(','));
+          
           if (resp != null) {
             final raw = (resp is String) ? jsonDecode(resp) : resp;
             List<dynamic> ordersList = [];
             if (raw is List) ordersList = raw;
             else if (raw is Map && raw['data'] is List) ordersList = raw['data'];
+            
+            debugPrint('✓ Parsed ${ordersList.length} orders from batch');
+            
+            if (ordersList.isNotEmpty) {
+              // Log first order to see all fields
+              final firstOrder = ordersList[0];
+              if (firstOrder is Map) {
+                debugPrint('Sample order fields: ${firstOrder.keys.toList()}');
+                debugPrint('Sample order data: $firstOrder');
+              }
+            }
+            
             for (final o in ordersList) {
               if (o is Map) {
-                final key = o['order_id']?.toString() ?? o['id']?.toString() ?? '';
-                if (key.isNotEmpty) orderMap[key] = Map<String, dynamic>.from(o);
+                final key = o['order_id']?.toString() ?? '';
+                if (key.isNotEmpty) {
+                  orderMap[key] = Map<String, dynamic>.from(o);
+                  
+                  // Extract customor_id (the typo field name in order collection)
+                  final customorId = (o['customor_id'] ?? o['customor_id'] ?? o['customerId'])?.toString() ?? '';
+                  debugPrint('✓ Order $key -> customor_id=$customorId');
+                  
+                  if (customorId.isNotEmpty) {
+                    customerIds.add(customorId);
+                  } else {
+                    debugPrint('✗ Order $key has NO customor_id!');
+                  }
+                }
               }
             }
           }
         } catch (e) {
-          debugPrint('fetchDeliveryOrderReport: orders batch error: $e');
+          debugPrint('✗ Orders batch error: $e');
         }
       }
     }
+    
+    debugPrint('Extracted ${customerIds.length} unique customor_ids: $customerIds');
 
     // Fetch customers by IDs
     final customerMap = <String, Map<String, dynamic>>{};
@@ -986,23 +1069,79 @@ Future<List<Map<String, dynamic>>> fetchDeliveryOrderReport([String? ownerId]) a
       for (var i = 0; i < ids.length; i += batchSize) {
         final batch = ids.sublist(i, (i + batchSize) > ids.length ? ids.length : i + batchSize);
         try {
-          final resp = await api.selectWhereIn(token, project, 'customer', appid, 'customer_id', batch.join(','));
+          debugPrint('Fetching customers batch with customor_id: $batch');
+          final resp = await api.selectWhereIn(token, project, 'customer', appid, 'customor_id', batch.join(','));
+          
           if (resp != null) {
             final raw = (resp is String) ? jsonDecode(resp) : resp;
             List<dynamic> custList = [];
             if (raw is List) custList = raw;
             else if (raw is Map && raw['data'] is List) custList = raw['data'];
+            
+            debugPrint('✓ Parsed ${custList.length} customers');
+            
+            if (custList.isNotEmpty) {
+              // Log first customer to see all fields
+              final firstCust = custList[0];
+              if (firstCust is Map) {
+                debugPrint('Sample customer fields: ${firstCust.keys.toList()}');
+                debugPrint('Sample customer data: $firstCust');
+              }
+            }
+            
             for (final c in custList) {
               if (c is Map) {
-                final key = c['customer_id']?.toString() ?? c['id']?.toString() ?? '';
-                if (key.isNotEmpty) customerMap[key] = Map<String, dynamic>.from(c);
+                final key = c['customor_id']?.toString() ?? c['id']?.toString() ?? '';
+                if (key.isNotEmpty) {
+                  customerMap[key] = Map<String, dynamic>.from(c);
+                  debugPrint('✓ Customer $key loaded: nama_toko=${c['nama_toko']}, no_telepon=${c['no_telepon_customer']}');
+                }
               }
             }
           }
         } catch (e) {
-          debugPrint('fetchDeliveryOrderReport: customers batch error: $e');
+          debugPrint('✗ Customers batch error: $e');
         }
       }
+
+      // If still empty, try fetching each customer individually with selectWhere
+      if (customerMap.isEmpty && customerIds.isNotEmpty) {
+        debugPrint('Batch returned empty, trying selectWhere for each customer...');
+        for (final custId in customerIds) {
+          try {
+            debugPrint('Fetching individual customer: $custId');
+            final resp = await api.selectWhere(token, project, 'customer', appid, 'customor_id', custId);
+            debugPrint('Individual customer response: ${resp.runtimeType}');
+            
+            if (resp != null) {
+              final raw = (resp is String) ? jsonDecode(resp) : resp;
+              List<dynamic> custList = [];
+              if (raw is List) custList = raw;
+              else if (raw is Map && raw['data'] is List) custList = raw['data'];
+              
+              debugPrint('Parsed ${custList.length} customer records');
+              
+              for (final c in custList) {
+                if (c is Map) {
+                  final key = c['customor_id']?.toString() ?? c['id']?.toString() ?? '';
+                  if (key.isNotEmpty) {
+                    customerMap[key] = Map<String, dynamic>.from(c);
+                    debugPrint('✓ selectWhere loaded customer $key: nama_toko=${c['nama_toko']}');
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('✗ selectWhere customer error for $custId: $e');
+          }
+        }
+      }
+    }
+
+    debugPrint('Loaded ${customerMap.length} customers into map');
+    if (customerMap.isNotEmpty) {
+      final firstCust = customerMap.values.first;
+      debugPrint('Sample customer data keys: ${firstCust.keys.toList()}');
     }
 
     // Group order items by order ID
@@ -1014,36 +1153,78 @@ Future<List<Map<String, dynamic>>> fetchDeliveryOrderReport([String? ownerId]) a
       final item = {
         'id_produk': raw['product_id'] ?? raw['productId'] ?? raw['id_produk'] ?? '',
         'nama_barang': raw['product_name'] ?? raw['nama'] ?? raw['nama_barang'] ?? '',
+        'jumlah': raw['jumlah_produk'] ?? raw['quantity'] ?? raw['jumlah'] ?? 1,
+        'harga': raw['harga'] ?? raw['price'] ?? 0,
+        'total_harga': raw['total_harga'] ?? raw['total_price'] ?? 0,
         'list_barcode': raw['list_barcode'] ?? raw['listBarcode'] ?? raw['barcodes'] ?? [],
       };
       itemsByOrder.putIfAbsent(oid, () => []).add(item);
     }
 
+    debugPrint('Grouped ${itemsByOrder.length} order items');
+
     // Assemble final report
     final results = <Map<String, dynamic>>[];
-    final processedOrderIds = orderIds.isNotEmpty ? orderIds : itemsByOrder.keys.toSet();
-    for (final oid in processedOrderIds) {
+    for (final oid in orderIds) {
       final orderData = orderMap[oid] ?? {};
-      final custId = (orderData['customer_id'] ?? orderData['customerId'] ?? orderData['customer'])?.toString() ?? '';
+      final custId = (orderData['customor_id'])?.toString() ?? '';
       final cust = customerMap[custId] ?? {};
+
+      // Try to get tanggal_order and total from order_items if order collection is empty
+      String tanggalOrder = orderData['tanggal_order'] ?? orderData['order_date'] ?? orderData['created_at'] ?? orderData['date'] ?? '';
+      dynamic totalHarga = orderData['total_harga'] ?? orderData['total'] ?? orderData['total_price'] ?? orderData['grand_total'];
+      
+      // If still missing, try to get from order_items
+      if (tanggalOrder.isEmpty || totalHarga == null) {
+        final itemsForOrder = itemsByOrder[oid] ?? [];
+        if (itemsForOrder.isNotEmpty) {
+          final firstItem = itemsForOrder[0];
+          if (tanggalOrder.isEmpty && firstItem['tanggal_order'] != null) {
+            tanggalOrder = firstItem['tanggal_order'].toString();
+          }
+          // Calculate total from items if not found
+          if (totalHarga == null || (totalHarga is num && totalHarga == 0)) {
+            try {
+              totalHarga = itemsForOrder.fold<num>(0, (sum, item) {
+                final itemTotal = item['total_harga'];
+                num val = 0;
+                if (itemTotal is num) {
+                  val = itemTotal;
+                } else if (itemTotal is String) {
+                  val = num.tryParse(itemTotal) ?? 0;
+                }
+                return sum + val;
+              });
+            } catch (e) {
+              debugPrint('✗ Error calculating total from items: $e');
+              totalHarga = 0;
+            }
+          }
+        }
+      }
+
+      debugPrint('Building row: order_id=$oid, customor_id=$custId, cust_found=${cust.isNotEmpty}, nama_toko=${cust['nama_toko'] ?? 'EMPTY'}');
 
       results.add({
         'order_id': oid,
-        'customer_id': custId,
-        'nama_toko': cust['nama_toko'] ?? cust['store_name'] ?? cust['toko'] ?? cust['shop_name'] ?? '',
-        'nama_pemilik_toko': cust['nama_pemilik_toko'] ?? cust['owner_name'] ?? cust['pemilik'] ?? '',
-        'no_telepon_customer': cust['no_telepon'] ?? cust['phone'] ?? cust['telepon'] ?? cust['phone_number'] ?? '',
-        'alamat_toko': cust['alamat'] ?? cust['address'] ?? cust['alamat_toko'] ?? '',
-        'tanggal_order': orderData['tanggal_order'] ?? orderData['order_date'] ?? orderData['created_at'] ?? orderData['date'] ?? '',
-        'total_harga': orderData['total'] ?? orderData['total_price'] ?? orderData['grand_total'] ?? 0,
+        'customor_id': custId,
+        'nama_toko': cust['nama_toko'] ?? cust['store_name'] ?? cust['toko'] ?? cust['shop_name'] ?? cust['store'] ?? '',
+        'nama_pemilik_toko': cust['nama_pemilik_toko'] ?? cust['owner_name'] ?? cust['pemilik'] ?? cust['pemilik_toko'] ?? cust['owner'] ?? cust['nama_pemilik'] ?? '',
+        'no_telepon_customer': cust['no_telepon_customer'] ?? cust['no_telepon'] ?? cust['phone'] ?? cust['telepon'] ?? cust['phone_number'] ?? cust['no_hp'] ?? cust['nomor_telepon'] ?? '',
+        'alamat_toko': cust['alamat_toko'] ?? cust['alamat'] ?? cust['address'] ?? cust['alamat_lengkap'] ?? '',
+        'tanggal_order': tanggalOrder,
+        'total_harga': totalHarga ?? 0,
         'items': itemsByOrder[oid] ?? [],
       });
     }
 
-    debugPrint('fetchDeliveryOrderReport: assembled ${results.length} orders (orderItems total: ${orderItemsList.length})');
+    debugPrint('=== fetchDeliveryOrderReport COMPLETE ===');
+    debugPrint('Assembled ${results.length} final orders');
+    
     return results;
   } catch (e) {
-    debugPrint('fetchDeliveryOrderReport final error: $e');
+    debugPrint('=== fetchDeliveryOrderReport ERROR ===');
+    debugPrint('final error: $e');
     return [];
   }
 }
@@ -1149,5 +1330,42 @@ String _formatPrice(dynamic v) {
     return v.toString();
   } catch (_) {
     return v.toString();
+  }
+}
+
+/// Test function: Fetch and print customer collection data
+Future<void> testFetchCustomers() async {
+  final api = DataService();
+  try {
+    debugPrint('=== TEST: Fetching customers ===');
+    
+    // Try selectAll first
+    final resp = await api.selectAll(token, project, 'customer', appid);
+    debugPrint('selectAll response type: ${resp.runtimeType}');
+    
+    List<dynamic> custList = [];
+    if (resp is String) {
+      final parsed = jsonDecode(resp);
+      if (parsed is List) custList = parsed;
+      else if (parsed is Map && parsed['data'] is List) custList = parsed['data'];
+    } else if (resp is List) {
+      custList = resp;
+    } else if (resp is Map && resp['data'] is List) {
+      custList = resp['data'];
+    }
+    
+    debugPrint('✓ Got ${custList.length} customers total');
+    
+    if (custList.isNotEmpty) {
+      debugPrint('First 3 customers:');
+      for (var i = 0; i < (custList.length > 3 ? 3 : custList.length); i++) {
+        final c = custList[i];
+        debugPrint('Customer $i:');
+        debugPrint('  Fields: ${(c as Map).keys.toList()}');
+        debugPrint('  Data: $c');
+      }
+    }
+  } catch (e) {
+    debugPrint('✗ Error testing customers: $e');
   }
 }

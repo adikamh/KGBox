@@ -335,6 +335,10 @@ class ListProductScreen {
       'tanggal_expired': target['tanggal_expired'] ?? target['expiredDate'] ?? product['expired'] ?? '',
       'supplierName': target['supplierName'] ?? target['supplier_name'] ?? product['supplierName'] ?? product['supplier_name'] ?? '',
       'ownerid': target['ownerid'] ?? product['ownerId'] ?? product['ownerid'] ?? '',
+      // New fields: isiPerdus, ukuran, varian
+      'isiPerdus': target['isiPerdus'] ?? target['isi_perdus'] ?? product['isiPerdus'] ?? product['isi_perdus'] ?? 0,
+      'ukuran': target['ukuran'] ?? target['size'] ?? product['ukuran'] ?? product['size'] ?? '',
+      'varian': target['varian'] ?? target['variant'] ?? product['varian'] ?? product['variant'] ?? '',
     };
 
     final result = await Navigator.push<Map<String, dynamic>?>(
