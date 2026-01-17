@@ -590,6 +590,30 @@ class _DetailProductPageState extends State<DetailProductPage> {
               controller: controller,
               product: product,
             ),
+
+            const Divider(height: 32),
+
+            _buildDetailRow(
+              icon: Icons.warning_amber_rounded,
+              label: 'Isi Perdus (Waste/Loss)',
+              value: product['isiPerdus']?.toString() ?? '0',
+            ),
+
+            const Divider(height: 32),
+
+            _buildDetailRow(
+              icon: Icons.straighten_rounded,
+              label: 'Ukuran (Size)',
+              value: product['ukuran']?.toString() ?? '-',
+            ),
+
+            const Divider(height: 32),
+
+            _buildDetailRow(
+              icon: Icons.palette_rounded,
+              label: 'Varian (Variant)',
+              value: product['varian']?.toString() ?? '-',
+            ),
           ],
         ),
       ),

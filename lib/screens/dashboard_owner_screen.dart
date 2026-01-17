@@ -10,6 +10,7 @@ import 'package:kgbox/screens/catat_barang_keluar_screen.dart';
 import '../pages/dashboard_owner_page.dart';
 import '../pages/list_product_page.dart';
 import '../pages/pengiriman_page.dart';
+import '../pages/notifikasi_owner_page.dart';
 import 'logout_screen.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
@@ -23,32 +24,26 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 
 class DashboardOwnerController {
-  // Data management
-  final List<Map<String, dynamic>> _monthlyProductFlow = [
-    {'month': 'Jan', 'in': 245, 'out': 189},
-    {'month': 'Feb', 'in': 220, 'out': 175},
-    {'month': 'Mar', 'in': 280, 'out': 195},
-    {'month': 'Apr', 'in': 260, 'out': 210},
-    {'month': 'Mei', 'in': 300, 'out': 230},
-    {'month': 'Jun', 'in': 320, 'out': 250},
-  ];
-
-  final List<Map<String, dynamic>> _monthlyTransactions = [
-    {'month': 'Jan', 'transactions': 1250, 'color': const Color(0xFF3B82F6)},
-    {'month': 'Feb', 'transactions': 1380, 'color': const Color(0xFFEF4444)},
-    {'month': 'Mar', 'transactions': 1450, 'color': const Color(0xFF10B981)},
-    {'month': 'Apr', 'transactions': 1520, 'color': const Color(0xFFF59E0B)},
-    {'month': 'Mei', 'transactions': 1600, 'color': const Color(0xFF8B5CF6)},
-    {'month': 'Jun', 'transactions': 1680, 'color': const Color(0xFFEC4899)},
-    {'month': 'Jul', 'transactions': 1350, 'color': const Color(0xFF14B8A6)},
-    {'month': 'Agu', 'transactions': 1420, 'color': const Color(0xFFF97316)},
-    {'month': 'Sep', 'transactions': 1700, 'color': const Color(0xFF6366F1)},
-    {'month': 'Okt', 'transactions': 1750, 'color': const Color(0xFF84CC16)},
-    {'month': 'Nov', 'transactions': 1480, 'color': const Color(0xFF06B6D4)},
-    {'month': 'Des', 'transactions': 1750, 'color': const Color(0xFF8B5CF6)},
-  ];
-
+  // Data management - now dynamic based on current month
+  List<Map<String, dynamic>> _monthlyProductFlow = [];
+  List<Map<String, dynamic>> _monthlyTransactions = [];
+  
   static const int _maxTransactions = 2000;
+  static const List<String> _monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  static const List<Color> _transactionColors = [
+    Color(0xFF3B82F6), // Blue
+    Color(0xFFEF4444), // Red
+    Color(0xFF10B981), // Green
+    Color(0xFFF59E0B), // Amber
+    Color(0xFF8B5CF6), // Purple
+    Color(0xFFEC4899), // Pink
+    Color(0xFF14B8A6), // Teal
+    Color(0xFFF97316), // Orange
+    Color(0xFF6366F1), // Indigo
+    Color(0xFF84CC16), // Lime
+    Color(0xFF06B6D4), // Cyan
+    Color(0xFF8B5CF6), // Purple
+  ];
 
   // Dynamic dashboard counts
   int totalProduk = 0;
@@ -67,11 +62,11 @@ class DashboardOwnerController {
 
   // Calculations
   int get totalProductIn {
-    return _monthlyProductFlow.map((e) => e['in'] as int).reduce((a, b) => a + b);
+    return _monthlyProductFlow.isEmpty ? 0 : _monthlyProductFlow.map((e) => (e['in'] as int?) ?? 0).reduce((a, b) => a + b);
   }
 
   int get totalProductOut {
-    return _monthlyProductFlow.map((e) => e['out'] as int).reduce((a, b) => a + b);
+    return _monthlyProductFlow.isEmpty ? 0 : _monthlyProductFlow.map((e) => (e['out'] as int?) ?? 0).reduce((a, b) => a + b);
   }
 
   int get remainingStock {
@@ -79,7 +74,7 @@ class DashboardOwnerController {
   }
 
   int get totalTransactions {
-    return _monthlyTransactions.map((e) => e['transactions'] as int).reduce((a, b) => a + b);
+    return _monthlyTransactions.isEmpty ? 0 : _monthlyTransactions.map((e) => (e['transactions'] as int?) ?? 0).reduce((a, b) => a + b);
   }
 
   // Helper function untuk menghitung barcode dari string
@@ -106,6 +101,70 @@ class DashboardOwnerController {
     }
     
     return 0;
+  }
+
+  /// Fetch dynamic product flow data (in/out) for last 12 months from current month
+  Future<void> fetchDynamicProductFlow(String ownerId) async {
+    try {
+      final result = await fetchMonthlyTotals(ownerId);
+      final inTotals = result['in'] ?? List<double>.filled(12, 0);
+      final outTotals = result['out'] ?? List<double>.filled(12, 0);
+      
+      final now = DateTime.now();
+      final months = <DateTime>[];
+      
+      // Generate last 12 months dates from current month backwards
+      for (int i = 11; i >= 0; i--) {
+        DateTime dt = DateTime(now.year, now.month - i, 1);
+        months.add(dt);
+      }
+      
+      _monthlyProductFlow = List.generate(12, (i) {
+        final dt = months[i];
+        final monthLabel = _monthLabels[dt.month - 1];
+        return {
+          'month': monthLabel,
+          'in': inTotals[i].toInt(),
+          'out': outTotals[i].toInt(),
+        };
+      });
+      
+      debugPrint('fetchDynamicProductFlow: updated with ${_monthlyProductFlow.length} months');
+    } catch (e) {
+      debugPrint('fetchDynamicProductFlow error: $e');
+      _monthlyProductFlow = [];
+    }
+  }
+
+  /// Fetch dynamic transaction data for last 12 months from current month
+  Future<void> fetchDynamicTransactions(String ownerId) async {
+    try {
+      final data = await fetchFinancialMonthlyTotals(ownerId);
+      
+      final now = DateTime.now();
+      final months = <DateTime>[];
+      
+      // Generate last 12 months dates from current month backwards
+      for (int i = 11; i >= 0; i--) {
+        DateTime dt = DateTime(now.year, now.month - i, 1);
+        months.add(dt);
+      }
+      
+      _monthlyTransactions = List.generate(12, (i) {
+        final result = i < data.length ? data[i] : {'transactions': 0};
+        return {
+          'month': result['month'] ?? _monthLabels[i],
+          'transactions': result['transactions'] ?? 0,
+          'total': result['total'] ?? 0.0,
+          'color': _transactionColors[i % _transactionColors.length],
+        };
+      });
+      
+      debugPrint('fetchDynamicTransactions: updated with ${_monthlyTransactions.length} months');
+    } catch (e) {
+      debugPrint('fetchDynamicTransactions error: $e');
+      _monthlyTransactions = [];
+    }
   }
 
   // Load dynamic counts for the dashboard owner
@@ -669,6 +728,12 @@ class DashboardOwnerController {
       }
       expiredCount = expired;
       
+      // Fetch dynamic product flow and transaction data
+      if (ownerId.isNotEmpty) {
+        await fetchDynamicProductFlow(ownerId);
+        await fetchDynamicTransactions(ownerId);
+      }
+      
       isLoadingCounts = false;
       debugPrint('loadCounts completed: totalProduk=$totalProduk, barangMasuk=$barangMasuk, barangKeluar=$barangKeluar, expiredCount=$expiredCount');
       
@@ -682,16 +747,19 @@ class DashboardOwnerController {
   /// Filters by `ownerid` and aggregates per month for the last 12 months.
   Future<List<Map<String, dynamic>>> fetchFinancialMonthlyTotals(String ownerId) async {
     final now = DateTime.now();
-    final months = List.generate(12, (i) {
-      final dt = DateTime(now.year, now.month - (11 - i), 1);
-      return DateTime(dt.year, dt.month);
-    });
+    final months = <DateTime>[];
+    
+    // Generate last 12 months dates from current month backwards
+    for (int i = 11; i >= 0; i--) {
+      DateTime dt = DateTime(now.year, now.month - i, 1);
+      months.add(dt);
+    }
 
     // initialize output with month labels and zero counts
     final monthNames = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
     final colors = _monthlyTransactions.map((e) => e['color'] as Color).toList();
     final out = List<Map<String, dynamic>>.generate(12, (i) => {
-      'month': monthNames[i],
+      'month': monthNames[months[i].month - 1],
       'transactions': 0,
       'total': 0.0,
       'color': colors.length > i ? colors[i] : const Color(0xFF3B82F6),
@@ -883,8 +951,11 @@ class DashboardOwnerController {
   }
 
   void showNotifications(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Notifikasi belum diimplementasikan')),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const NotifikasiOwnerPage(),
+      ),
     );
   }
 
@@ -1488,9 +1559,11 @@ class DashboardOwnerController {
       // 1) Fetch order_items for this owner via REST
       dynamic oiRaw;
       try {
+        debugPrint('=== FETCHING order_items with ownerid=$ownerId ===');
         oiRaw = await _api.selectWhere(token, project, 'order_items', appid, 'ownerid', ownerId);
+        debugPrint('Response: ${oiRaw.runtimeType}');
       } catch (e) {
-        debugPrint('fetchDeliveryOrderReport: selectWhere order_items error: $e');
+        debugPrint('✗ selectWhere order_items error: $e');
         oiRaw = '[]';
       }
 
@@ -1503,47 +1576,84 @@ class DashboardOwnerController {
         } else if (oiRaw is List) orderItemsList = oiRaw;
         else if (oiRaw is Map && oiRaw['data'] is List) orderItemsList = oiRaw['data'];
       } catch (e) {
-        debugPrint('fetchDeliveryOrderReport: parsing order_items failed: $e');
+        debugPrint('✗ parsing order_items failed: $e');
         orderItemsList = [];
       }
 
-      // Collect order_ids and customer_ids
+      debugPrint('✓ Got ${orderItemsList.length} order_items');
+
+      // Collect order_ids from order_items
       final orderIds = <String>{};
-      final customerIds = <String>{};
       for (final raw in orderItemsList) {
         if (raw is! Map) continue;
         final oid = raw['order_id'] ?? raw['orderId'] ?? raw['order_id_server'] ?? raw['order'];
         if (oid != null) orderIds.add(oid.toString());
-        final cid = raw['customer_id'] ?? raw['customerId'] ?? raw['customer'];
-        if (cid != null) customerIds.add(cid.toString());
       }
 
-      // 2) Fetch orders in batches via REST
+      debugPrint('✓ Extracted ${orderIds.length} order_ids: $orderIds');
+
+      // 2) Extract customer IDs from order collection using customor_id field
       final orderMap = <String, Map<String, dynamic>>{};
+      final customerIds = <String>{};
+      
+      debugPrint('Extracting customor_id from ${orderIds.length} order_ids...');
+      
+      // Fetch orders to get customor_id
       if (orderIds.isNotEmpty) {
         final ids = orderIds.toList();
         const batchSize = 50;
+        
         for (var i = 0; i < ids.length; i += batchSize) {
           final batch = ids.sublist(i, (i + batchSize) > ids.length ? ids.length : i + batchSize);
           try {
+            debugPrint('Fetching orders batch: $batch');
             final resp = await _api.selectWhereIn(token, project, 'order', appid, 'order_id', batch.join(','));
+            
             if (resp != null) {
               final raw = (resp is String) ? jsonDecode(resp) : resp;
               List<dynamic> ordersList = [];
               if (raw is List) ordersList = raw;
               else if (raw is Map && raw['data'] is List) ordersList = raw['data'];
+              
+              debugPrint('✓ Parsed ${ordersList.length} orders from batch');
+              
+              if (ordersList.isNotEmpty) {
+                // Log first order to see all fields
+                final firstOrder = ordersList[0];
+                if (firstOrder is Map) {
+                  debugPrint('Sample order fields: ${firstOrder.keys.toList()}');
+                  debugPrint('Sample order data: $firstOrder');
+                }
+              }
+              
               for (final o in ordersList) {
                 if (o is Map) {
-                  final key = o['order_id']?.toString() ?? o['id']?.toString() ?? '';
-                  if (key.isNotEmpty) orderMap[key] = Map<String, dynamic>.from(o);
+                  final key = o['order_id']?.toString() ?? '';
+                  if (key.isNotEmpty) {
+                    orderMap[key] = Map<String, dynamic>.from(o);
+                    
+                    // Extract customor_id (the typo field name in order collection)
+                    final customorId = (o['customor_id'] ?? o['customer_id'] ?? o['customerId'])?.toString() ?? '';
+                    debugPrint('✓ Order $key -> customor_id=$customorId');
+                    
+                    if (customorId.isNotEmpty) {
+                      customerIds.add(customorId);
+                    } else {
+                      debugPrint('✗ Order $key has NO customor_id!');
+                    }
+                  }
                 }
               }
             }
           } catch (e) {
-            debugPrint('fetchDeliveryOrderReport: fetch orders batch error: $e');
+            debugPrint('✗ Orders batch error: $e');
           }
         }
       }
+      
+      debugPrint('Extracted ${customerIds.length} unique customor_ids: $customerIds');
+
+      debugPrint('✓ Loaded ${orderMap.length} orders, ${customerIds.length} customer_ids: $customerIds');
 
       // 3) Fetch customers in batches via REST (collection name 'customer' expected)
       final customerMap = <String, Map<String, dynamic>>{};
@@ -1553,23 +1663,65 @@ class DashboardOwnerController {
         for (var i = 0; i < ids.length; i += batchSize) {
           final batch = ids.sublist(i, (i + batchSize) > ids.length ? ids.length : i + batchSize);
           try {
+            debugPrint('Fetching customers: $batch');
             final resp = await _api.selectWhereIn(token, project, 'customer', appid, 'customer_id', batch.join(','));
+            debugPrint('Response: ${resp.runtimeType}');
             if (resp != null) {
               final raw = (resp is String) ? jsonDecode(resp) : resp;
               List<dynamic> custList = [];
               if (raw is List) custList = raw;
               else if (raw is Map && raw['data'] is List) custList = raw['data'];
+              debugPrint('✓ Parsed ${custList.length} customers');
               for (final c in custList) {
                 if (c is Map) {
                   final key = c['customer_id']?.toString() ?? c['id']?.toString() ?? '';
-                  if (key.isNotEmpty) customerMap[key] = Map<String, dynamic>.from(c);
+                  if (key.isNotEmpty) {
+                    customerMap[key] = Map<String, dynamic>.from(c);
+                    debugPrint('Customer $key: nama_toko=${c['nama_toko']}, no_telepon=${c['no_telepon_customer']}');
+                  }
                 }
               }
             }
           } catch (e) {
-            debugPrint('fetchDeliveryOrderReport: fetch customers batch error: $e');
+            debugPrint('✗ fetch customers batch error: $e');
           }
         }
+
+        // If still empty, try fetching each customer individually with selectWhere
+        if (customerMap.isEmpty && customerIds.isNotEmpty) {
+          debugPrint('Batch empty, trying selectWhere for each customer...');
+          for (final custId in customerIds) {
+            try {
+              debugPrint('selectWhere customer: $custId');
+              final resp = await _api.selectWhere(token, project, 'customer', appid, 'customer_id', custId);
+              debugPrint('Response: ${resp.runtimeType}');
+              if (resp != null) {
+                final raw = (resp is String) ? jsonDecode(resp) : resp;
+                List<dynamic> custList = [];
+                if (raw is List) custList = raw;
+                else if (raw is Map && raw['data'] is List) custList = raw['data'];
+                debugPrint('✓ Parsed ${custList.length} records');
+                for (final c in custList) {
+                  if (c is Map) {
+                    final key = c['customer_id']?.toString() ?? c['id']?.toString() ?? '';
+                    if (key.isNotEmpty) {
+                      customerMap[key] = Map<String, dynamic>.from(c);
+                      debugPrint('✓ Loaded customer $key: nama_toko=${c['nama_toko']}');
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              debugPrint('✗ selectWhere error for $custId: $e');
+            }
+          }
+        }
+      }
+
+      debugPrint('✓ Loaded ${customerMap.length} customers');
+      if (customerMap.isNotEmpty) {
+        final firstCust = customerMap.values.first;
+        debugPrint('Sample keys: ${firstCust.keys.toList()}');
       }
 
       // 4) Assemble report per order
@@ -1587,20 +1739,21 @@ class DashboardOwnerController {
       }
 
       final results = <Map<String, dynamic>>[];
-      final processedOrderIds = orderIds.isNotEmpty ? orderIds : itemsByOrder.keys.toSet();
-      for (final oid in processedOrderIds) {
+      for (final oid in orderIds) {
         final orderData = orderMap[oid] ?? {};
-        final custId = (orderData['customer_id'] ?? orderData['customerId'] ?? orderData['customer'])?.toString() ?? '';
+        final custId = (orderData['customer_id'])?.toString() ?? '';
         final cust = customerMap[custId] ?? {};
+
+        debugPrint('fetchDeliveryOrderReport: order_id=$oid, customer_id=$custId, cust_data=${cust.isEmpty ? 'EMPTY' : 'found ${cust.keys.length} fields'}');
 
         final row = <String, dynamic>{
           'order_id': oid,
           'id_staff': orderData['id_staff'] ?? orderData['staff_id'] ?? orderData['user_id'] ?? '',
           'customer_id': custId,
-          'nama_toko': cust['nama_toko'] ?? cust['store_name'] ?? cust['toko'] ?? cust['shop_name'] ?? '',
-          'nama_pemilik_toko': cust['nama_pemilik_toko'] ?? cust['owner_name'] ?? cust['pemilik'] ?? '',
-          'no_telepon_customer': cust['no_telepon'] ?? cust['phone'] ?? cust['telepon'] ?? cust['phone_number'] ?? '',
-          'alamat_toko': cust['alamat'] ?? cust['address'] ?? cust['alamat_toko'] ?? '',
+          'nama_toko': cust['nama_toko'] ?? cust['store_name'] ?? cust['toko'] ?? cust['shop_name'] ?? cust['store'] ?? '',
+          'nama_pemilik_toko': cust['nama_pemilik_toko'] ?? cust['owner_name'] ?? cust['pemilik'] ?? cust['pemilik_toko'] ?? cust['owner'] ?? '',
+          'no_telepon_customer': cust['no_telepon'] ?? cust['phone'] ?? cust['telepon'] ?? cust['phone_number'] ?? cust['no_hp'] ?? cust['nomor_telepon'] ?? '',
+          'alamat_toko': cust['alamat'] ?? cust['address'] ?? cust['alamat_toko'] ?? cust['alamat_lengkap'] ?? '',
           'tanggal_order': orderData['tanggal_order'] ?? orderData['order_date'] ?? orderData['created_at'] ?? orderData['date'] ?? '',
           'total_harga': orderData['total'] ?? orderData['total_price'] ?? orderData['grand_total'] ?? 0,
           'items': itemsByOrder[oid] ?? [],
@@ -1609,6 +1762,7 @@ class DashboardOwnerController {
         results.add(row);
       }
 
+      debugPrint('fetchDeliveryOrderReport: assembled ${results.length} final orders');
       return {
         'type': 'Laporan Order Pengiriman',
         'timestamp': DateTime.now(),

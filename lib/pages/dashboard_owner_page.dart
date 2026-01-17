@@ -16,6 +16,8 @@ import 'package:provider/provider.dart';
 import '../screens/dashboard_owner_screen.dart';
 // ignore: unused_import, undefined_shown_name
 import '../screens/dashboard_owner_screen.dart' as _controller show shareFile;
+import 'package:kgbox/services/notification_owner_service.dart';
+import 'package:kgbox/services/fcm_service.dart';
 
 class DashboardOwnerPage extends StatefulWidget {
   final String userRole;
@@ -36,91 +38,29 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
   final TextEditingController _totalProdukController = TextEditingController(text: '1.200');
   final TextEditingController _barangMasukController = TextEditingController(text: '245');
   final TextEditingController _barangKeluarController = TextEditingController(text: '189');
+  
+  // ScrollControllers for chart scrolling
+  late ScrollController _productFlowScrollController;
+  late ScrollController _transactionChartScrollController;
 
   @override
   void initState() {
     super.initState();
+    _productFlowScrollController = ScrollController();
+    _transactionChartScrollController = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Initialize FCM for owner with permission request
+      await FCMService.instance.initMessaging(context);
+      
       await _controller.loadCounts(context);
       setState(() {});
     });
   }
 
-  /// Debug helper: fetch sample `product_barcodes` docs for an owner and print key fields
-  Future<List<Map<String, dynamic>>> fetchProductBarcodeSamples(String ownerId, {int limit = 10}) async {
-    final firestore = FirebaseFirestore.instance;
-    final results = <Map<String, dynamic>>[];
-    try {
-      Query<Map<String, dynamic>> q = firestore.collection('product_barcodes').limit(limit);
-
-      // Try owner field variants
-      try {
-        q = firestore.collection('product_barcodes').where('ownerId', isEqualTo: ownerId).limit(limit);
-        var snap = await q.get();
-        if (snap.docs.isEmpty) {
-          q = firestore.collection('product_barcodes').where('ownerid', isEqualTo: ownerId).limit(limit);
-          snap = await q.get();
-        }
-        if (snap.docs.isEmpty) {
-          // try owner or owner_id
-          q = firestore.collection('product_barcodes').where('owner', isEqualTo: ownerId).limit(limit);
-          snap = await q.get();
-        }
-        if (snap.docs.isEmpty) {
-          q = firestore.collection('product_barcodes').where('owner_id', isEqualTo: ownerId).limit(limit);
-          snap = await q.get();
-        }
-        // If still empty, fall back to a limited fetch of all docs
-        if (snap.docs.isEmpty) {
-          snap = await firestore.collection('product_barcodes').limit(limit).get();
-        }
-
-        for (final d in snap.docs) {
-          final data = d.data();
-          final ownerField = (data['ownerId'] ?? data['ownerid'] ?? data['owner'] ?? data['owner_id'])?.toString() ?? '';
-          final scannedRaw = data['scannedAt'];
-          DateTime? scannedParsed;
-          try {
-            // try to use existing parser if available
-            // ignore: unnecessary_type_check
-            if (this is dynamic && (this as dynamic)._parseScannedAtValue != null) {
-              try {
-                scannedParsed = (this as dynamic)._parseScannedAtValue(scannedRaw) as DateTime?;
-              } catch (_) {
-                scannedParsed = null;
-              }
-            }
-          } catch (_) {}
-
-          final item = {
-            'docId': d.id,
-            'ownerField': ownerField,
-            'scannedRaw': scannedRaw,
-            'scannedParsed': scannedParsed?.toIso8601String(),
-            'rawData': data,
-          };
-          results.add(item);
-          debugPrint('fetchProductBarcodeSamples: $item');
-        }
-      } catch (e) {
-        debugPrint('fetchProductBarcodeSamples error: $e');
-        final snap = await firestore.collection('product_barcodes').limit(limit).get();
-        for (final d in snap.docs) {
-          final data = d.data();
-          final item = {'docId': d.id, 'rawData': data};
-          results.add(item);
-          debugPrint('fetchProductBarcodeSamples fallback: $item');
-        }
-      }
-    } catch (e) {
-      debugPrint('fetchProductBarcodeSamples final error: $e');
-    }
-
-    return results;
-  }
-
   @override
   void dispose() {
+    _productFlowScrollController.dispose();
+    _transactionChartScrollController.dispose();
     _totalProdukController.dispose();
     _barangMasukController.dispose();
     _barangKeluarController.dispose();
@@ -168,10 +108,7 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
             setState(() {});
           },
         ),
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-          onPressed: () => _controller.showNotifications(context),
-        ),
+        _buildNotificationButton(),
         PopupMenuButton<int>(
           icon: const Icon(Icons.exit_to_app, color: Colors.white),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -685,10 +622,10 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 150,
+            height: 350,
             child: _buildMiniProductFlowChart(),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           _buildChartLegends(),
         ],
       ),
@@ -697,115 +634,244 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
 
   Widget _buildMiniProductFlowChart() {
     final ownerId = _getCurrentOwnerId();
-    debugPrint('_buildMiniProductFlowChart: calling fetchMonthlyTotals with ownerId=$ownerId');
-    return FutureBuilder<Map<String, List<double>>>(
-      future: _controller.fetchMonthlyTotals(ownerId),
-      builder: (context, snap) {
-        debugPrint('_buildMiniProductFlowChart: state=${snap.connectionState}, hasData=${snap.hasData}, hasError=${snap.hasError}');
-        if (snap.hasError) {
-          debugPrint('_buildMiniProductFlowChart error: ${snap.error}');
-        }
-        
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
-        }
+    debugPrint('_buildMiniProductFlowChart: using dynamic data from controller');
+    
+    // Gunakan data yang sudah di-fetch secara dinamis di controller
+    final productFlow = _controller.monthlyProductFlow;
+    
+    if (productFlow.isEmpty) {
+      return const Center(
+        child: SizedBox(
+          height: 250,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
 
-        if (!snap.hasData) {
-          return const Center(child: Text('Tidak ada data', style: TextStyle(fontSize: 12)));
-        }
+    final inValues = productFlow.map((e) => (e['in'] as int?)?.toDouble() ?? 0.0).toList();
+    final outValues = productFlow.map((e) => (e['out'] as int?)?.toDouble() ?? 0.0).toList();
+    final months = productFlow.map((e) => e['month'] as String).toList();
+    
+    debugPrint('_buildMiniProductFlowChart: months=$months, inValues=$inValues, outValues=$outValues');
+    
+    final maxVal = [...inValues, ...outValues].fold<double>(1, (prev, e) => e > prev ? e : prev);
 
-        final inTotals = snap.data!['in']!;
-        final outTotals = snap.data!['out']!;
-        final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-        
-        debugPrint('_buildMiniProductFlowChart: inTotals=$inTotals, outTotals=$outTotals');
-        
-        final maxVal = [...inTotals, ...outTotals].fold<double>(1, (prev, e) => e > prev ? e : prev);
+    return Container(
+      height: 340,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                SingleChildScrollView(
+                  controller: _productFlowScrollController,
+                  scrollDirection: Axis.horizontal,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 50.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: List.generate(12, (i) {
+                              final inVal = inValues[i];
+                              final outVal = outValues[i];
+                              final inHeight = maxVal <= 0 ? 0.0 : (inVal / maxVal) * 50;
+                              final outHeight = maxVal <= 0 ? 0.0 : (outVal / maxVal) * 50;
+                              final totalHeight = (outHeight + inHeight).clamp(6.0, 80.0);
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: List.generate(12, (i) {
-            final inVal = inTotals[i];
-            final outVal = outTotals[i];
-            final inHeight = maxVal <= 0 ? 0.0 : (inVal / maxVal) * 60;
-            final outHeight = maxVal <= 0 ? 0.0 : (outVal / maxVal) * 60;
-
-            return Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final maxBarHeight = constraints.maxHeight - 18; // ruang label bulan
-
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      if (outHeight > 0)
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 2),
-                          height: outHeight.clamp(0, maxBarHeight),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEF4444),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                              return SizedBox(
+                                width: 70,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 3.0),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Container(
+                                        width: 28,
+                                        height: totalHeight,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            if (outHeight > 0)
+                                              Container(
+                                                width: 28,
+                                                height: outHeight.clamp(0, 50),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFEF4444),
+                                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: const Color(0xFFEF4444).withOpacity(0.3),
+                                                      blurRadius: 3,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            if (inHeight > 0)
+                                              Container(
+                                                width: 28,
+                                                height: inHeight.clamp(0, 50),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF10B981),
+                                                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(2)),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: const Color(0xFF10B981).withOpacity(0.3),
+                                                      blurRadius: 3,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
                           ),
                         ),
-                      if (inHeight > 0)
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 2),
-                          height: inHeight.clamp(0, maxBarHeight),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981),
-                            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(2)),
-                          ),
-            ),
-                      const SizedBox(height: 4),
-                      SizedBox(
-                        height: 14,
-                        child: Text(
-                          months[i],
-                          style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280)),
-                          overflow: TextOverflow.ellipsis,
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(12, (i) {
+                            return SizedBox(
+                              width: 70,
+                              child: Center(
+                                child: Text(
+                                  months[i],
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF6B7280),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Left scroll indicator - CLICKABLE
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      _productFlowScrollController.animateTo(
+                        _productFlowScrollController.offset - 200,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                    child: Container(
+                      width: 40,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            const Color(0xFFF9FAFB),
+                            const Color(0xFFF9FAFB).withOpacity(0),
+                          ],
                         ),
                       ),
-                    ],
-                  );
-                },
-              ),
-            );
-          }),
-        );
-      },
+                      child: Center(
+                        child: Icon(
+                          Icons.chevron_left,
+                          size: 28,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Right scroll indicator - CLICKABLE
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      _productFlowScrollController.animateTo(
+                        _productFlowScrollController.offset + 200,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                    child: Container(
+                      width: 40,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            const Color(0xFFF9FAFB).withOpacity(0),
+                            const Color(0xFFF9FAFB),
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.chevron_right,
+                          size: 28,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Divider(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
+        ],
+      ),
     );
   }
 
   Widget _buildChartLegends() {
-    return FutureBuilder<Map<String, List<double>>>(
-      future: _controller.fetchMonthlyTotals(_getCurrentOwnerId()),
-      builder: (context, snap) {
-        int totalIn = 0;
-        int totalOut = 0;
-        
-        if (snap.hasData) {
-          final inTotals = snap.data!['in']!;
-          final outTotals = snap.data!['out']!;
-          debugPrint('_buildChartLegends: snap=${snap.data}, inTotals=$inTotals, outTotals=$outTotals');
-          totalIn = inTotals.map((e) => e.toInt()).reduce((a, b) => a + b);
-          totalOut = outTotals.map((e) => e.toInt()).reduce((a, b) => a + b);
-        }
+    // Gunakan data yang sudah di-fetch secara dinamis di controller
+    int totalIn = _controller.totalProductIn;
+    int totalOut = _controller.totalProductOut;
+    
+    debugPrint('_buildChartLegends: totalIn=$totalIn, totalOut=$totalOut');
 
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _buildChartLegendItem(
-              const Color(0xFF10B981),
-              'Masuk ($totalIn unit)',
-            ),
-            const SizedBox(width: 16),
-            _buildChartLegendItem(
-              const Color(0xFFEF4444),
-              'Keluar ($totalOut unit)',
-            ),
-          ],
-        );
-      },
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildChartLegendItem(
+          const Color(0xFF10B981),
+          'Masuk ($totalIn unit)',
+        ),
+        const SizedBox(width: 16),
+        _buildChartLegendItem(
+          const Color(0xFFEF4444),
+          'Keluar ($totalOut unit)',
+        ),
+      ],
     );
   }
 
@@ -820,6 +886,24 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
       debugPrint('_getCurrentOwnerId error: $e');
       return '';
     }
+  }
+
+  /// Build notification button dengan badge count
+  Widget _buildNotificationButton() {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final ownerId = auth.currentUser?.ownerId ?? auth.currentUser?.id ?? '';
+    
+    if (ownerId.isEmpty) {
+      return IconButton(
+        icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+        onPressed: () => _controller.showNotifications(context),
+      );
+    }
+
+    return _NotificationButtonWidget(
+      ownerId: ownerId,
+      onPressed: () => _controller.showNotifications(context),
+    );
   }
 
   Widget _buildChartLegendItem(Color color, String text) {
@@ -943,103 +1027,220 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
 
   Widget _buildTransactionChart() {
     final ownerId = _getCurrentOwnerId();
-
-    return FutureBuilder<List<dynamic>>(
-      future: Future.wait([_controller.fetchFinancialMonthlyTotals(ownerId), _controller.fetchTotalCustomers(ownerId)]),
-      builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text('Gagal memuat data: ${snap.error}'));
-        if (!snap.hasData) return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)));
-
-        final data = (snap.data![0] ?? []) as List<Map<String, dynamic>>;
-        final uniqueCustomers = (snap.data![1] ?? 0) as int;
-        final maxTransactions = data.map((d) => (d['transactions'] as int)).fold<int>(1, (a, b) => b > a ? b : a);
-
-        return Container(
-          height: 250,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF9FAFB),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+    debugPrint('_buildTransactionChart: using dynamic data from controller');
+    
+    // Gunakan data yang sudah di-fetch secara dinamis di controller
+    final monthlyTransactions = _controller.monthlyTransactions;
+    
+    if (monthlyTransactions.isEmpty) {
+      return Container(
+        height: 350,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
           ),
-          child: Column(
-            children: [
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: data.map((item) {
-                    final double heightRatio = (item['transactions'] as int) / (maxTransactions == 0 ? 1 : maxTransactions);
-                    return Expanded(
-                      child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Flexible(
-                              fit: FlexFit.loose,
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 4),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    '${item['transactions']}',
-                                    style: const TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF6B7280),
-                                    ),
+        ),
+      );
+    }
+
+    final maxTransactions = monthlyTransactions.map((d) => (d['transactions'] as int)).fold<int>(1, (a, b) => b > a ? b : a);
+
+    return Container(
+      height: 380,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                SingleChildScrollView(
+                  controller: _transactionChartScrollController,
+                  scrollDirection: Axis.horizontal,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 50.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: monthlyTransactions.map((item) {
+                              final double heightRatio = (item['transactions'] as int) / (maxTransactions == 0 ? 1 : maxTransactions);
+                              final barHeight = (150 * heightRatio).clamp(10.0, 150.0);
+                              
+                              return SizedBox(
+                                width: 70,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 3.0),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Flexible(
+                                        fit: FlexFit.loose,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(bottom: 4.0),
+                                          child: Text(
+                                            '${item['transactions']}',
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF6B7280),
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        width: 40,
+                                        height: barHeight,
+                                        decoration: BoxDecoration(
+                                          color: item['color'] as Color,
+                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: (item['color'] as Color).withOpacity(0.3),
+                                              blurRadius: 6,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            ),
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 2),
-                            height: (120 * heightRatio).clamp(8.0, 120.0),
-                            decoration: BoxDecoration(
-                              color: item['color'] as Color,
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  (item['color'] as Color).withOpacity(0.9),
-                                  (item['color'] as Color).withOpacity(0.7),
-                                ],
-                              ),
-                            ),
+                              );
+                            }).toList(),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item['month'],
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF6B7280),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: monthlyTransactions.map((item) {
+                            return SizedBox(
+                              width: 70,
+                              child: Center(
+                                child: Text(
+                                  item['month'],
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Color(0xFF6B7280),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Divider(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
-              const SizedBox(height: 8),
-              _buildChartSummary(data, uniqueCustomers),
-            ],
+                // Left scroll indicator - CLICKABLE
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      _transactionChartScrollController.animateTo(
+                        _transactionChartScrollController.offset - 200,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                    child: Container(
+                      width: 40,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            const Color(0xFFF9FAFB),
+                            const Color(0xFFF9FAFB).withOpacity(0),
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.chevron_left,
+                          size: 28,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Right scroll indicator - CLICKABLE
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      _transactionChartScrollController.animateTo(
+                        _transactionChartScrollController.offset + 200,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                    child: Container(
+                      width: 40,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            const Color(0xFFF9FAFB).withOpacity(0),
+                            const Color(0xFFF9FAFB),
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.chevron_right,
+                          size: 28,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+          const SizedBox(height: 16),
+          Divider(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
+          const SizedBox(height: 12),
+          _buildChartSummary(monthlyTransactions),
+        ],
+      ),
     );
   }
 
-  Widget _buildChartSummary([List<Map<String, dynamic>>? data, int uniqueCustomers = 0]) {
+  Widget _buildChartSummary([List<Map<String, dynamic>>? data]) {
     int total = 0;
     if (data != null) {
-      total = data.map((d) => d['transactions'] as int).fold<int>(0, (a, b) => a + b);
+      total = data.map((d) => (d['transactions'] as int?) ?? 0).fold<int>(0, (a, b) => a + b);
     } else {
       total = _controller.totalTransactions;
     }
-    final maxTx = uniqueCustomers > 0 ? uniqueCustomers : _controller.maxTransactions;
 
     // compute omzet (sum of 'total') if data provided
     double sumTotal = 0.0;
@@ -1071,10 +1272,6 @@ class _DashboardOwnerPageState extends State<DashboardOwnerPage> {
             ),
           ],
         ),
-            Text(
-              'Total Customer: $maxTx',
-              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-            ),
       ],
     );
   }
@@ -1692,5 +1889,81 @@ class _DonutPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DonutPainter oldDelegate) {
     return oldDelegate.segments != segments || oldDelegate.colors != colors;
+  }
+}
+
+// Widget untuk NotificationButton dengan badge
+class _NotificationButtonWidget extends StatelessWidget {
+  final VoidCallback onPressed;
+  final String ownerId;
+
+  const _NotificationButtonWidget({
+    required this.onPressed,
+    required this.ownerId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final notificationService = NotificationOwnerService();
+
+    return StreamBuilder<int>(
+      stream: _countUnreadNotificationsStream(ownerId, notificationService),
+      builder: (context, snapshot) {
+        final unreadCount = snapshot.data ?? 0;
+
+        return Stack(
+          alignment: Alignment.topRight,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+              onPressed: onPressed,
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade600,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 20,
+                    minHeight: 20,
+                  ),
+                  child: Center(
+                    child: Text(
+                      unreadCount > 99 ? '99+' : unreadCount.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Stream yang memancarkan unread notification count
+  Stream<int> _countUnreadNotificationsStream(
+    String ownerId,
+    NotificationOwnerService service,
+  ) async* {
+    while (true) {
+      try {
+        final count = await service.countUnreadNotifications(ownerId);
+        yield count;
+      } catch (e) {
+        yield 0;
+      }
+      // Refresh setiap 5 detik
+      await Future.delayed(const Duration(seconds: 5));
+    }
   }
 }

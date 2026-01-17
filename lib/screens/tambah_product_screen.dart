@@ -25,6 +25,9 @@ class AddProductScreen {
   TextEditingController? hargaController;
   TextEditingController? tanggalExpiredController;
   TextEditingController? productionDateController;
+  TextEditingController? isiPerdusController;
+  TextEditingController? ukuranController;
+  TextEditingController? varianController;
   
   // Initialize
   void initialize({
@@ -46,6 +49,9 @@ class AddProductScreen {
     hargaController = hargaCtrl ?? TextEditingController();
     tanggalExpiredController = tanggalExpiredCtrl ?? TextEditingController();
     productionDateController = productionDateCtrl ?? TextEditingController();
+    isiPerdusController = isiPerdusCtrl ?? TextEditingController();
+    ukuranController = ukuranCtrl ?? TextEditingController();
+    varianController = varianCtrl ?? TextEditingController();
     this.ownerId = ownerId;
     
     productId = barcode ?? _generateProductId();
@@ -167,6 +173,9 @@ class AddProductScreen {
       'expiredDate': tanggalExpiredController!.text.trim(),
       'supplierId': supplierId ?? '',
       'supplierName': supplierName ?? '',
+      'isiPerdus': int.tryParse(isiPerdusController?.text.trim() ?? '0') ?? 0,
+      'ukuran': ukuranController?.text.trim() ?? '',
+      'varian': varianController?.text.trim() ?? '',
       'createdAt': FieldValue.serverTimestamp(),
       'ownerId': ownerId ?? '',
       'ukuran': ukuranProduct,
@@ -239,6 +248,9 @@ class AddProductScreen {
           'expiredDate': tanggalExpiredController!.text.trim(),
           'supplierId': supplierId ?? '',
           'supplierName': supplierName ?? '',
+          'isiPerdus': int.tryParse(isiPerdusController?.text.trim() ?? '0') ?? 0,
+          'ukuran': ukuranController?.text.trim() ?? '',
+          'varian': varianController?.text.trim() ?? '',
           'createdAt': FieldValue.serverTimestamp(),
           'ownerId': ownerId ?? '',
           'ukuran': ukuranProduct,

@@ -60,6 +60,9 @@ class _AddProductPageState extends State<AddProductPage> {
       hargaCtrl: _hargaController,
       tanggalExpiredCtrl: _tanggalExpiredController,
       productionDateCtrl: _productionDateController,
+      isiPerdusCtrl: _isiPerdusController,
+      ukuranCtrl: _ukuranController,
+      varianCtrl: _varianController,
     );
     
     _selectedCategory = _controller.selectedCategory;
@@ -387,6 +390,40 @@ class _AddProductPageState extends State<AddProductPage> {
                       }
                       return null;
                     },
+                  ),
+                  
+                  const SizedBox(height: 16),
+
+                  _buildTextField(
+                    label: 'Isi Perdus (Waste/Loss)',
+                    hint: '0',
+                    icon: Icons.warning_amber_rounded,
+                    controller: _isiPerdusController,
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value != null && value.isNotEmpty && int.tryParse(value) == null) {
+                        return 'Isi perdus harus berupa angka';
+                      }
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  _buildTextField(
+                    label: 'Ukuran (Size)',
+                    hint: 'Contoh: M, L, XL atau 500ml',
+                    icon: Icons.straighten_rounded,
+                    controller: _ukuranController,
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  _buildTextField(
+                    label: 'Varian (Variant)',
+                    hint: 'Contoh: Rasa Pedas, Warna Merah',
+                    icon: Icons.palette_rounded,
+                    controller: _varianController,
                   ),
                   
                   const SizedBox(height: 16),

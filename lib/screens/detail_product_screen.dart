@@ -37,6 +37,11 @@ class DetailProductScreen {
     // stock if present, otherwise unknown (UI will rely on barcode count)
     final stockVal = product['stock'] ?? product['jumlah_produk'] ?? 0;
 
+    // new fields: isi_perdus, ukuran, varian
+    final isiPerdus = product['isiPerdus'] ?? product['isi_perdus'] ?? 0;
+    final ukuran = product['ukuran'] ?? product['size'] ?? '';
+    final varian = product['varian'] ?? product['variant'] ?? '';
+
     return {
       'code': code.toString(),
       'name': name.toString(),
@@ -53,6 +58,9 @@ class DetailProductScreen {
       'expiredRaw': rawExpired,
       'expiredText': _computeExpiredText(rawExpired),
       'supplierCompany': (product['supplierName'] ?? product['supplier'] ?? product['supplier_name'] ?? product['supplierCompany'] ?? '').toString(),
+      'isiPerdus': isiPerdus.toString(),
+      'ukuran': ukuran.toString(),
+      'varian': varian.toString(),
     };
   }
 
