@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
-import 'package:kgbox/services/restapi.dart';
+import 'package:KGbox/services/restapi.dart';
 
 /// ChartOwnerScreen
 /// - Streams documents from a collection (default: 'stock_movements')

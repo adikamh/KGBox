@@ -9,6 +9,7 @@ import 'screens/expired_screen.dart';
 import 'screens/pengiriman_screen.dart';
 import 'screens/supplier_screen.dart';
 import 'screens/stok_produk_screen.dart';
+import 'screens/splash_screen.dart';
 import 'pages/stok_owner_page.dart';
 import 'providers/auth_provider.dart';
 import 'services/firebase_options.dart';
@@ -29,12 +30,13 @@ class WarehouseApp extends StatelessWidget {
     return MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => AuthProvider())],
       child: DevicePreview(
-        enabled: true,
+        enabled: false,
         builder: (context) => MaterialApp(
           title: 'KGbox',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(primarySwatch: Colors.blue),
           routes: {
+            '/splash': (ctx) => const SplashScreen(),
             '/login': (ctx) => LoginScreen(),
             '/register': (ctx) => RegisterScreen(),
             '/forgot-password': (ctx) => ResetPasswordScreen(),
@@ -45,7 +47,7 @@ class WarehouseApp extends StatelessWidget {
             '/supplier': (ctx) => SupplierScreen(),
             '/stok_produk': (ctx) => StokProdukScreen(),
           },
-          home: LoginScreen(),
+          home: const SplashScreen(),
           useInheritedMediaQuery: true,
         ),
       ),

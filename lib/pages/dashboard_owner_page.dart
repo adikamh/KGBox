@@ -3,21 +3,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import 'package:kgbox/pages/kelola_staff_page.dart';
-import 'package:kgbox/screens/export_report_screen.dart';
+import 'package:KGbox/pages/kelola_staff_page.dart';
+import 'package:KGbox/screens/export_report_screen.dart';
 import 'package:intl/intl.dart';
-import 'package:kgbox/providers/auth_provider.dart';
-import 'package:kgbox/screens/dashboard_owner_screen.dart';
+import 'package:KGbox/providers/auth_provider.dart';
+import 'package:KGbox/screens/dashboard_owner_screen.dart';
 // ignore: unused_import, undefined_shown_name
-import 'package:kgbox/screens/dashboard_owner_screen.dart' as _controller show shareFile;
+import 'package:KGbox/screens/dashboard_owner_screen.dart' as _controller show shareFile;
 // ignore: duplicate_import
-import 'package:kgbox/screens/export_report_screen.dart';
+import 'package:KGbox/screens/export_report_screen.dart';
 import 'package:provider/provider.dart';
 import '../screens/dashboard_owner_screen.dart';
 // ignore: unused_import, undefined_shown_name
 import '../screens/dashboard_owner_screen.dart' as _controller show shareFile;
-import 'package:kgbox/services/notification_owner_service.dart';
-import 'package:kgbox/services/fcm_service.dart';
+import 'package:KGbox/services/notification_owner_service.dart';
+import 'package:KGbox/services/fcm_service.dart';
 
 class DashboardOwnerPage extends StatefulWidget {
   final String userRole;

@@ -3,7 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:kgbox/screens/catat_barang_keluar_screen.dart';
+import 'package:KGbox/screens/catat_barang_keluar_screen.dart';
 import '../screens/dashboard_staff_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/fcm_service.dart';
