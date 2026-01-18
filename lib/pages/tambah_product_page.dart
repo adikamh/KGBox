@@ -32,9 +32,9 @@ class _AddProductPageState extends State<AddProductPage> {
   final TextEditingController _productionDateController = TextEditingController();
   final TextEditingController _tanggalExpiredController = TextEditingController();
   final TextEditingController _categoryFreeController = TextEditingController();
-  final TextEditingController _isiPerdusController = TextEditingController();
-  final TextEditingController _ukuranController = TextEditingController();
-  final TextEditingController _varianController = TextEditingController();
+  final TextEditingController _ukuranProductController = TextEditingController();
+  final TextEditingController _varianProductController = TextEditingController();
+  final TextEditingController _isiPerDusController = TextEditingController();
   List<Map<String, dynamic>> _suppliers = [];
   bool _loadingSuppliers = true;
   String? _selectedSupplierId;
@@ -166,9 +166,9 @@ class _AddProductPageState extends State<AddProductPage> {
     _productionDateController.dispose();
     _supplierFreeController.dispose();
     _categoryFreeController.dispose();
-    _isiPerdusController.dispose();
-    _ukuranController.dispose();
-    _varianController.dispose();
+    _ukuranProductController.dispose();
+    _varianProductController.dispose();
+    _isiPerDusController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -317,6 +317,31 @@ class _AddProductPageState extends State<AddProductPage> {
                     onChanged: (value) => _controller.updateProductCode(),
                   ),
                   
+                  const SizedBox(height: 16),
+
+                  _buildTextField(
+                    label: 'Ukuran Produk',
+                    hint: 'Contoh: 200ml',
+                    icon: Icons.straighten_rounded,
+                    controller: _ukuranProductController,
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildTextField(
+                    label: 'Varian Produk',
+                    hint: 'Contoh: Rasa Ayam',
+                    icon: Icons.palette_rounded,
+                    controller: _varianProductController,
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildTextField(
+                    label: 'Isi per Dus',
+                    hint: 'Contoh: 24',
+                    icon: Icons.inventory_rounded,
+                    controller: _isiPerDusController,
+                    keyboardType: TextInputType.number,
+                  ),
                   const SizedBox(height: 16),
 
                   _buildProductionDateField(),

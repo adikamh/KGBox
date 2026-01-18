@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../screens/detail_product_screen.dart';
@@ -24,6 +23,7 @@ class _DetailProductPageState extends State<DetailProductPage> {
   @override
   void initState() {
     super.initState();
+    debugPrint('Product data received: ${widget.product}'); // Tambahkan log ini untuk memeriksa data
     _controller.initialize(widget.product);
     _loadBarcodes();
   }
@@ -551,6 +551,36 @@ class _DetailProductPageState extends State<DetailProductPage> {
               icon: Icons.store_rounded,
               label: 'Supplier',
               value: product['supplierCompany']?.toString() ?? '-',
+            ),
+
+            const Divider(height: 32),
+
+            _buildDetailRow(
+              icon: Icons.straighten_rounded,
+              label: 'Ukuran Produk',
+              value: widget.product['ukuran']?.toString().isNotEmpty == true
+                  ? widget.product['ukuran'].toString()
+                  : '-',
+            ),
+
+            const Divider(height: 32),
+
+            _buildDetailRow(
+              icon: Icons.color_lens_rounded,
+              label: 'Varian Produk',
+              value: widget.product['varian']?.toString().isNotEmpty == true
+                  ? widget.product['varian'].toString()
+                  : 'Tidak ada',
+            ),
+
+            const Divider(height: 32),
+
+            _buildDetailRow(
+              icon: Icons.inventory_2_rounded,
+              label: 'Isi per Dus',
+              value: widget.product['isiPerDus']?.toString().isNotEmpty == true
+                  ? widget.product['isiPerDus'].toString()
+                  : '-',
             ),
 
             const Divider(height: 32),
