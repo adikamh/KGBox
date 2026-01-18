@@ -54,8 +54,15 @@ class LoginPage extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [BoxShadow(color: Colors.black.withAlpha((0.15 * 255).round()), blurRadius: 20, offset: const Offset(0, 8))],
                     ),
-                    child: const Center(
-                      child: Icon(Icons.warehouse_rounded, size: 48, color: Color(0xFF2965C0)),
+                    child: ClipOval(
+                      child: Center(
+                        child: Image.asset(
+                          'lib/assets/Logo_aplikasi.png',
+                          width: 140,
+                          height: 130,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
                   ),
 

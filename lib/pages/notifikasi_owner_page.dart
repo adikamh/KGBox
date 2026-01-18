@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:kgbox/screens/notifikasi_owner_screen.dart';
-import 'package:kgbox/providers/auth_provider.dart';
+import 'package:KGbox/screens/notifikasi_owner_screen.dart';
+import 'package:KGbox/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 
 class NotifikasiOwnerPage extends StatefulWidget {

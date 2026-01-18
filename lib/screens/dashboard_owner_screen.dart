@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 // ignore: unused_import
-import 'package:kgbox/screens/catat_barang_keluar_screen.dart';
+import 'package:KGbox/screens/catat_barang_keluar_screen.dart';
 // ignore: unused_import
 import '../pages/dashboard_owner_page.dart';
 import '../pages/list_product_page.dart';
@@ -14,7 +14,7 @@ import '../pages/notifikasi_owner_page.dart';
 import 'logout_screen.dart';
 import '../services/restapi.dart';
 import '../services/config.dart';
-import 'package:kgbox/providers/auth_provider.dart';
+import 'package:KGbox/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 // Platform-specific IO is handled by `ExportService` to support web builds.
 import 'dart:typed_data';

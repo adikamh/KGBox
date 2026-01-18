@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:kgbox/providers/auth_provider.dart';
+import 'package:KGbox/providers/auth_provider.dart';
 
 class StokOwnerScreen extends StatefulWidget {
 	const StokOwnerScreen({super.key});

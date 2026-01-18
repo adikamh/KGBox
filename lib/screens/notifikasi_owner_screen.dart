@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:kgbox/services/notification_owner_service.dart';
+import 'package:KGbox/services/notification_owner_service.dart';
 
 class NotifikasiOwnerScreenController {
   final NotificationOwnerService _service = NotificationOwnerService();

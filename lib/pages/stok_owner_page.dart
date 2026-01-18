@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:kgbox/screens/stok_owner_screen.dart';
+import 'package:KGbox/screens/stok_owner_screen.dart';
 
 /// UI wrapper page for Stok Owner. The actual logic and list
 /// implementation live in `stok_owner_screen.dart`.

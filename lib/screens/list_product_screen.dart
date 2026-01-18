@@ -1,6 +1,6 @@
 // lib/screens/list_product_screen.dart
 import 'package:flutter/material.dart';
-import 'package:kgbox/models/product_model.dart';
+import 'package:KGbox/models/product_model.dart';
 // ignore: unused_import
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
